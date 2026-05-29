@@ -1,17 +1,19 @@
 import os
 import requests
+from datetime import datetime, timezone
 from typing import Any
 from langchain_core.tools import tool
 
 # ── 실제 API 호출 함수 ──────────────────────────────────────
 
-def _fetch_hackernews(limit: int = 5) -> list[dict]:
+HN_ENDPOINT = "https://hacker-news.firebaseio.com/v0/topstories.json"
+GITHUB_ENDPOINT = "https://api.github.com/search/repositories"
+
+
+def _fetch_hackernews(limit: int = 5) -> dict:
     """HackerNews Top Stories 실제 API 호출"""
     try:
-        res = requests.get(
-            "https://hacker-news.firebaseio.com/v0/topstories.json",
-            timeout=5
-        )
+        res = requests.get(HN_ENDPOINT, timeout=5)
         ids = res.json()[:limit * 2]
         stories = []
         for story_id in ids:
@@ -29,42 +31,53 @@ def _fetch_hackernews(limit: int = 5) -> list[dict]:
                 })
             if len(stories) >= limit:
                 break
-        return stories
+        return {"items": stories, "data_source": "real_api", "endpoint": HN_ENDPOINT}
     except Exception as e:
-        return [{"error": str(e), "source": "hackernews"}]
+        return {
+            "items": [],
+            "data_source": "fallback",
+            "endpoint": HN_ENDPOINT,
+            "fallback_reason": f"hackernews_request_failed: {e}",
+        }
 
 
-def _fetch_github_trending(limit: int = 5) -> list[dict]:
+def _fetch_github_trending(limit: int = 5) -> dict:
     """GitHub Trending 실제 API 호출"""
     try:
         res = requests.get(
-            "https://api.github.com/search/repositories",
+            GITHUB_ENDPOINT,
             params={
                 "q": "stars:>1000 pushed:>2026-01-01",
                 "sort": "stars",
                 "order": "desc",
-                "per_page": limit
+                "per_page": limit,
             },
             headers={"Accept": "application/vnd.github.v3+json"},
-            timeout=5
+            timeout=5,
         )
         items = res.json().get("items", [])
-        return [
+        parsed = [
             {
                 "keyword": f"{item['name']} ({item.get('language', 'unknown')})",
                 "source": "github",
                 "url": item["html_url"],
-                "stars": item["stargazers_count"]
+                "stars": item["stargazers_count"],
             }
             for item in items
         ]
+        return {"items": parsed, "data_source": "real_api", "endpoint": GITHUB_ENDPOINT}
     except Exception as e:
-        return [{"error": str(e), "source": "github"}]
+        return {
+            "items": [],
+            "data_source": "fallback",
+            "endpoint": GITHUB_ENDPOINT,
+            "fallback_reason": f"github_request_failed: {e}",
+        }
 
 
-def _fetch_reddit_mock(limit: int = 3) -> list[dict]:
-    """Reddit 밈 트렌드 — Mock (OAuth 설정 전까지 사용)"""
-    return [
+def _fetch_reddit_mock(limit: int = 3) -> dict:
+    """Reddit 밈 트렌드 — Mock (OAuth 미연동, API 응답 구조와 동일한 필드 유지)"""
+    items = [
         {"keyword": "카피바라 밈", "source": "reddit_mock",
          "url": "https://reddit.com/r/memes", "score": 94200},
         {"keyword": "게 사이드워크 밈", "source": "reddit_mock",
@@ -72,11 +85,17 @@ def _fetch_reddit_mock(limit: int = 3) -> list[dict]:
         {"keyword": "Italian Brainrot 밈", "source": "reddit_mock",
          "url": "https://reddit.com/r/memes", "score": 52100},
     ][:limit]
+    return {
+        "items": items,
+        "data_source": "mock",
+        "endpoint": None,
+        "fallback_reason": "reddit_oauth_not_configured",
+    }
 
 
-def _fetch_youtube_mock(limit: int = 3) -> list[dict]:
-    """YouTube Shorts 밈 트렌드 — Mock (API Key 설정 전까지 사용)"""
-    return [
+def _fetch_youtube_mock(limit: int = 3) -> dict:
+    """YouTube Shorts 밈 트렌드 — Mock (API Key 미설정, API 응답 구조와 동일한 필드 유지)"""
+    items = [
         {"keyword": "카피바라 느긋함", "source": "youtube_mock",
          "url": "https://youtube.com/shorts/example1", "views": 4200000},
         {"keyword": "고양이 찰떡 밈", "source": "youtube_mock",
@@ -84,6 +103,12 @@ def _fetch_youtube_mock(limit: int = 3) -> list[dict]:
         {"keyword": "NPC 챌린지", "source": "youtube_mock",
          "url": "https://youtube.com/shorts/example3", "views": 2800000},
     ][:limit]
+    return {
+        "items": items,
+        "data_source": "mock",
+        "endpoint": None,
+        "fallback_reason": "youtube_api_key_not_configured",
+    }
 
 
 # ── LangChain Tool 정의 ────────────────────────────────────
@@ -99,54 +124,69 @@ def trend_scanner(trend_type: str = "both", limit: int = 5) -> dict[str, Any]:
 
     Returns:
         ok: 성공 여부
-        data: meme_trends와 it_trends 키워드 목록
+        data: meme_trends, it_trends, source_provenance (각 소스의 data_source/endpoint)
         error: 실패 시 에러 정보
     """
-    result = {"meme_trends": [], "it_trends": [], "partial_failure": []}
+    result: dict[str, Any] = {
+        "meme_trends": [],
+        "it_trends": [],
+        "partial_failure": [],
+        "source_provenance": {},
+    }
+    fetched_at = datetime.now(timezone.utc).isoformat()
+
+    def _record(name: str, fetched: dict) -> None:
+        result["source_provenance"][name] = {
+            "data_source": fetched["data_source"],
+            "endpoint": fetched.get("endpoint"),
+            "fallback_reason": fetched.get("fallback_reason"),
+            "items_returned": len(fetched.get("items", [])),
+            "fetched_at": fetched_at,
+        }
 
     # 밈 트렌드 수집
     if trend_type in ("meme", "both"):
         reddit = _fetch_reddit_mock(limit)
         youtube = _fetch_youtube_mock(limit)
+        _record("reddit", reddit)
+        _record("youtube", youtube)
 
-        if any("error" in r for r in reddit):
+        if reddit["data_source"] == "fallback" and not reddit["items"]:
             result["partial_failure"].append("reddit")
         else:
-            result["meme_trends"].extend(reddit)
+            result["meme_trends"].extend(reddit["items"])
 
-        if any("error" in r for r in youtube):
+        if youtube["data_source"] == "fallback" and not youtube["items"]:
             result["partial_failure"].append("youtube")
         else:
-            result["meme_trends"].extend(youtube)
+            result["meme_trends"].extend(youtube["items"])
 
     # IT 트렌드 수집
     if trend_type in ("IT", "both"):
         hn = _fetch_hackernews(limit)
         github = _fetch_github_trending(limit)
+        _record("hackernews", hn)
+        _record("github", github)
 
-        if any("error" in r for r in hn):
+        if hn["data_source"] == "fallback" and not hn["items"]:
             result["partial_failure"].append("hackernews")
         else:
-            result["it_trends"].extend(hn)
+            result["it_trends"].extend(hn["items"])
 
-        if any("error" in r for r in github):
+        if github["data_source"] == "fallback" and not github["items"]:
             result["partial_failure"].append("github")
         else:
-            result["it_trends"].extend(github)
+            result["it_trends"].extend(github["items"])
 
     # 전체 실패 체크
     if not result["meme_trends"] and not result["it_trends"]:
         return {
             "ok": False,
-            "data": None,
+            "data": result,
             "error": {
                 "code": "TOTAL_FAILURE",
-                "message": "모든 트렌드 소스 수집 실패"
-            }
+                "message": "모든 트렌드 소스 수집 실패",
+            },
         }
 
-    return {
-        "ok": True,
-        "data": result,
-        "error": None
-    }
+    return {"ok": True, "data": result, "error": None}

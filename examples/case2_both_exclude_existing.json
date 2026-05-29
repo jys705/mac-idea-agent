@@ -2,55 +2,56 @@
   "today_brief": {
     "meme_trend": [
       "카피바라 느긋함",
-      "카피바라 밈",
-      "게 사이드워크 밈",
+      "NPC 챌린지",
       "Italian Brainrot 밈",
-      "고양이 찰떡 밈",
-      "NPC 챌린지"
+      "게 사이드워크 밈",
+      "고양이 찰떡 밈"
     ],
     "it_trend": [
       "Claude Opus 4.8",
       "build-your-own-x",
-      "Cars are trying to spy on you",
       "public-apis",
+      "Cars are trying to spy on you",
       "freeCodeCamp"
     ],
     "concepts": [
       {
         "app_name": "CapybaraClaude",
-        "description": "Claude가 카피바라처럼 느긋하게 코드 리뷰를 미뤄주는 메뉴바 앱",
-        "core_feature": "AI가 '나중에 봐도 돼~' 식의 느긋한 리뷰 우선순위 조언. Claude API 응답 스트리밍으로 느긋한 답변 연출",
+        "description": "AI가 급한 Slack 메시지를 카피바라처럼 느긋하게 다시 써줌",
+        "core_feature": "메뉴바에서 텍스트 선택 후 Claude API가 '쿨한 척' 답변 톤으로 변환. 클립보드 감시 → 변환 → 복사까지 원클릭",
         "similar_app_exists": false,
         "difficulty": "2~3days",
         "stack": [
           "Swift",
           "SwiftUI",
+          "AppKit",
           "MenuBarExtra",
-          "Claude API",
-          "URLSession"
+          "Anthropic Claude API"
         ],
-        "vibe_coding_tip": "Claude API 응답 스트리밍으로 느긋한 답변 연출하기",
+        "vibe_coding_tip": "MenuBarExtra 설정과 클립보드 감시 로직에 시간 투자하세요.",
         "concept_basis": {
           "meme": "카피바라 느긋함",
           "it": "Claude Opus 4.8"
         }
       },
       {
-        "app_name": "Tralalero Builder",
-        "description": "Italian Brainrot 캐릭터가 당신만의 개발 튜토리얼 로드맵을 뚝딱 생성해주는 메뉴바 앱",
-        "core_feature": "키워드 입력 시 밈 캐릭터가 build-your-own-x 학습 경로 생성",
+        "app_name": "NPCron",
+        "description": "NPC처럼 반복 작업만 하는 나만의 커스텀 자동화 봇을 메뉴바에서 직접 만드는 앱",
+        "core_feature": "노코드로 NPC 루틴 봇 직접 조립 및 실행. JSON 스키마로 루틴 정의 후 인터프리터가 자동 실행",
         "similar_app_exists": false,
-        "difficulty": "2~3days",
+        "difficulty": "1week",
         "stack": [
           "Swift",
           "SwiftUI",
+          "AppKit",
+          "Combine",
           "URLSession",
-          "OpenAI API",
-          "Combine"
+          "CoreData",
+          "MenuBarExtra"
         ],
-        "vibe_coding_tip": "API 응답 스트리밍 처리와 UI 상태 동기화가 핵심. 먼저 목업으로 UI 완성하세요.",
+        "vibe_coding_tip": "노드 기반 UI 빌더는 복잡하므로, 먼저 JSON 스키마로 루틴 정의 후 인터프리터 구현에 집중하세요.",
         "concept_basis": {
-          "meme": "Italian Brainrot 밈",
+          "meme": "NPC 챌린지",
           "it": "build-your-own-x"
         }
       }
@@ -68,13 +69,163 @@
     "fallback_action": null,
     "sources": {
       "meme": [
-        "reddit_mock",
-        "youtube_mock"
+        {
+          "source": "reddit_mock",
+          "url": "https://reddit.com/r/memes"
+        },
+        {
+          "source": "reddit_mock",
+          "url": "https://reddit.com/r/dankmemes"
+        },
+        {
+          "source": "youtube_mock",
+          "url": "https://youtube.com/shorts/example1"
+        },
+        {
+          "source": "youtube_mock",
+          "url": "https://youtube.com/shorts/example2"
+        },
+        {
+          "source": "youtube_mock",
+          "url": "https://youtube.com/shorts/example3"
+        }
       ],
       "it": [
-        "hackernews",
-        "github"
+        {
+          "source": "hackernews",
+          "url": "https://hacker-news.firebaseio.com/v0/topstories.json"
+        },
+        {
+          "source": "github",
+          "url": "https://api.github.com/search/repositories"
+        }
       ]
-    }
+    },
+    "tool_trace": [
+      {
+        "step": 1,
+        "tool": "trend_scanner",
+        "ok": true,
+        "source_provenance": {
+          "reddit": {
+            "data_source": "mock",
+            "endpoint": null,
+            "fallback_reason": "reddit_oauth_not_configured",
+            "items_returned": 3,
+            "fetched_at": "2026-05-29T04:34:56.719065+00:00"
+          },
+          "youtube": {
+            "data_source": "mock",
+            "endpoint": null,
+            "fallback_reason": "youtube_api_key_not_configured",
+            "items_returned": 3,
+            "fetched_at": "2026-05-29T04:34:56.719065+00:00"
+          },
+          "hackernews": {
+            "data_source": "real_api",
+            "endpoint": "https://hacker-news.firebaseio.com/v0/topstories.json",
+            "fallback_reason": null,
+            "items_returned": 5,
+            "fetched_at": "2026-05-29T04:34:56.719065+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 5,
+            "fetched_at": "2026-05-29T04:34:56.719065+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 2,
+        "tool": "concept_generator",
+        "ok": true,
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-sonnet-4-6",
+          "temperature": 0.9
+        },
+        "error_code": null
+      },
+      {
+        "step": 3,
+        "tool": "concept_generator",
+        "ok": true,
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-sonnet-4-6",
+          "temperature": 0.9
+        },
+        "error_code": null
+      },
+      {
+        "step": 4,
+        "tool": "app_existence_checker",
+        "ok": true,
+        "source_provenance": {
+          "appstore": {
+            "data_source": "real_api",
+            "endpoint": "https://itunes.apple.com/search",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-05-29T04:35:11.942695+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-05-29T04:35:11.942695+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 5,
+        "tool": "app_existence_checker",
+        "ok": true,
+        "source_provenance": {
+          "appstore": {
+            "data_source": "real_api",
+            "endpoint": "https://itunes.apple.com/search",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-05-29T04:35:11.943277+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-05-29T04:35:11.943277+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 6,
+        "tool": "feasibility_checker",
+        "ok": true,
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-haiku-4-5-20251001",
+          "temperature": 0.3
+        },
+        "error_code": null
+      },
+      {
+        "step": 7,
+        "tool": "feasibility_checker",
+        "ok": true,
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-haiku-4-5-20251001",
+          "temperature": 0.3
+        },
+        "error_code": null
+      }
+    ]
   }
 }

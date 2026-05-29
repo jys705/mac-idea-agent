@@ -1,0 +1,15 @@
+{
+  "today_brief": null,
+  "metadata": {
+    "used_tools": [],
+    "loop_count": 0,
+    "failure_type": "guardrail_blocked",
+    "fallback_action": "요청 거부 — 도메인 외 또는 인젝션 의심",
+    "guardrail": {
+      "blocked": true,
+      "reason": "prompt_injection_suspected",
+      "matched_pattern": "ignore\\s+previous\\s+instructions"
+    },
+    "tool_trace": []
+  }
+}

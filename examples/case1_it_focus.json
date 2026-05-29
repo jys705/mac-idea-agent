@@ -2,42 +2,50 @@
   "today_brief": {
     "meme_trend": [],
     "it_trend": [
-      "Claude Opus 4.8 AI 코딩 어시스턴트",
-      "build-your-own-x 학습 트렌드",
-      "public-apis 오픈 API 생태계",
-      "1인 개발자 dorm room 밀리언달러 제품",
-      "freeCodeCamp 오픈소스 학습 플랫폼"
+      "Claude Opus 4.8 LLM 핫함",
+      "build-your-own-x 열풍 (GitHub 50만 스타)",
+      "public-apis 오픈소스 생태계",
+      "1인 개발자 dorm room 백만달러 제품",
+      "Cars are trying to spy on you (개인정보·보안 이슈)"
     ],
     "concepts": [
       {
-        "app_name": "TinyArchitect",
-        "description": "Claude가 '이거 직접 만들어봐'라고 속삭이는 메뉴바 학습 코치",
-        "core_feature": "복붙한 코드를 감지해 build-your-own 챌린지 알림 발사, Claude API 연동으로 해당 코드의 직접 구현 가이드 제공",
+        "app_name": "LLMentor",
+        "description": "Claude가 당신만의 AI 튜터를 설계해주는 메뉴바 앱",
+        "core_feature": "Claude로 나만의 학습 커리큘럼 즉석 생성",
         "similar_app_exists": false,
         "difficulty": "2~3days",
         "stack": [
           "Swift",
           "SwiftUI",
-          "AppKit",
           "MenuBarExtra",
-          "Claude API",
-          "NSPasteboard"
+          "Anthropic Claude API",
+          "URLSession"
         ],
-        "vibe_coding_tip": "클립보드 모니터링은 Timer로 주기적 감지, Claude 응답은 async/await로 UI 블로킹 방지"
+        "vibe_coding_tip": "MenuBarExtra + Claude API 연동이 핵심. 프롬프트 엔지니어링에 시간 투자하세요.",
+        "concept_basis": {
+          "meme": "build-your-own-x 열풍",
+          "it": "Claude Opus 4.8 LLM 핫함"
+        }
       },
       {
-        "app_name": "DormAPI",
-        "description": "메뉴바에서 무료 공개 API를 랜덤으로 골라 '오늘의 사이드 프로젝트' 아이디어를 던져주는 앱",
-        "core_feature": "public-apis 목록에서 랜덤 API 조합으로 밀리언달러 앱 아이디어 생성, 즐겨찾기 및 공유 기능",
+        "app_name": "APISnack",
+        "description": "메뉴바에서 public-apis 목록을 랜덤으로 뽑아 '오늘의 사이드 프로젝트 아이디어'를 던져주는 앱",
+        "core_feature": "클릭 한 번으로 랜덤 공개 API + 30초 앱 아이디어 자동 생성",
         "similar_app_exists": false,
         "difficulty": "2~3days",
         "stack": [
           "Swift",
           "SwiftUI",
+          "MenuBarExtra",
           "URLSession",
-          "Codable"
+          "OpenAI API"
         ],
-        "vibe_coding_tip": "public-apis JSON을 로컬에 저장하고 Codable로 파싱하면 네트워크 요청을 줄일 수 있습니다"
+        "vibe_coding_tip": "MenuBarExtra 기본 템플릿 사용하고 API 응답 캐싱으로 네트워크 최소화하기",
+        "concept_basis": {
+          "meme": "1인 개발자 dorm room 백만달러 제품",
+          "it": "public-apis 오픈소스 생태계"
+        }
       }
     ]
   },
@@ -54,9 +62,147 @@
     "sources": {
       "meme": [],
       "it": [
-        "hackernews",
-        "github"
+        {
+          "keyword": "Claude Opus 4.8",
+          "source": "hackernews",
+          "data_source": "real_api",
+          "endpoint": "https://hacker-news.firebaseio.com/v0/topstories.json",
+          "score": 1323
+        },
+        {
+          "keyword": "build-your-own-x",
+          "source": "github",
+          "data_source": "real_api",
+          "endpoint": "https://api.github.com/search/repositories",
+          "stars": 506696
+        },
+        {
+          "keyword": "public-apis",
+          "source": "github",
+          "data_source": "real_api",
+          "endpoint": "https://api.github.com/search/repositories",
+          "stars": 437684
+        },
+        {
+          "keyword": "I made a million dollar product from my dorm room",
+          "source": "hackernews",
+          "data_source": "real_api",
+          "endpoint": "https://hacker-news.firebaseio.com/v0/topstories.json",
+          "score": 251
+        }
       ]
-    }
+    },
+    "tool_trace": [
+      {
+        "step": 1,
+        "tool": "trend_scanner",
+        "ok": true,
+        "source_provenance": {
+          "hackernews": {
+            "data_source": "real_api",
+            "endpoint": "https://hacker-news.firebaseio.com/v0/topstories.json",
+            "fallback_reason": null,
+            "items_returned": 5,
+            "fetched_at": "2026-05-29T04:33:35.652611+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 5,
+            "fetched_at": "2026-05-29T04:33:35.652611+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 2,
+        "tool": "concept_generator",
+        "ok": true,
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-sonnet-4-6",
+          "temperature": 0.9
+        },
+        "error_code": null
+      },
+      {
+        "step": 3,
+        "tool": "concept_generator",
+        "ok": true,
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-sonnet-4-6",
+          "temperature": 0.9
+        },
+        "error_code": null
+      },
+      {
+        "step": 4,
+        "tool": "app_existence_checker",
+        "ok": true,
+        "source_provenance": {
+          "appstore": {
+            "data_source": "real_api",
+            "endpoint": "https://itunes.apple.com/search",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-05-29T04:33:52.696908+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-05-29T04:33:52.696908+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 5,
+        "tool": "app_existence_checker",
+        "ok": true,
+        "source_provenance": {
+          "appstore": {
+            "data_source": "real_api",
+            "endpoint": "https://itunes.apple.com/search",
+            "fallback_reason": null,
+            "items_returned": 4,
+            "fetched_at": "2026-05-29T04:33:52.699334+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-05-29T04:33:52.699334+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 6,
+        "tool": "feasibility_checker",
+        "ok": true,
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-haiku-4-5-20251001",
+          "temperature": 0.3
+        },
+        "error_code": null
+      },
+      {
+        "step": 7,
+        "tool": "feasibility_checker",
+        "ok": true,
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-haiku-4-5-20251001",
+          "temperature": 0.3
+        },
+        "error_code": null
+      }
+    ]
   }
 }

@@ -84,8 +84,15 @@ IT 트렌드: {it_trend}
 
         return {
             "ok": True,
-            "data": data,
-            "error": None
+            "data": {
+                **data,
+                "source_provenance": {
+                    "data_source": "llm_inference",
+                    "model": "claude-sonnet-4-6",
+                    "temperature": 0.9,
+                },
+            },
+            "error": None,
         }
 
     except Exception as e:

@@ -83,8 +83,15 @@ def feasibility_checker(
 
         return {
             "ok": True,
-            "data": data,
-            "error": None
+            "data": {
+                **data,
+                "source_provenance": {
+                    "data_source": "llm_inference",
+                    "model": "claude-haiku-4-5-20251001",
+                    "temperature": 0.3,
+                },
+            },
+            "error": None,
         }
 
     except Exception as e:

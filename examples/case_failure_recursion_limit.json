@@ -1,10 +1,238 @@
 {
   "today_brief": null,
   "metadata": {
-    "used_tools": [],
+    "used_tools": [
+      "trend_scanner",
+      "concept_generator",
+      "concept_generator",
+      "app_existence_checker",
+      "app_existence_checker",
+      "feasibility_checker",
+      "feasibility_checker",
+      "concept_generator",
+      "concept_generator",
+      "app_existence_checker",
+      "app_existence_checker",
+      "feasibility_checker",
+      "feasibility_checker"
+    ],
     "loop_count": 0,
     "failure_type": "agent_error",
     "fallback_action": null,
-    "error": "Recursion limit of 15 reached without hitting a stop condition. You can increase the limit by setting the `recursion_limit` config key.\nFor troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT"
+    "error": "Recursion limit of 15 reached without hitting a stop condition. You can increase the limit by setting the `recursion_limit` config key.\nFor troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT",
+    "tool_trace": [
+      {
+        "step": 1,
+        "tool": "trend_scanner",
+        "ok": true,
+        "source_provenance": {
+          "reddit": {
+            "data_source": "mock",
+            "endpoint": null,
+            "fallback_reason": "reddit_oauth_not_configured",
+            "items_returned": 3,
+            "fetched_at": "2026-05-29T04:38:09.429051+00:00"
+          },
+          "youtube": {
+            "data_source": "mock",
+            "endpoint": null,
+            "fallback_reason": "youtube_api_key_not_configured",
+            "items_returned": 3,
+            "fetched_at": "2026-05-29T04:38:09.429051+00:00"
+          },
+          "hackernews": {
+            "data_source": "real_api",
+            "endpoint": "https://hacker-news.firebaseio.com/v0/topstories.json",
+            "fallback_reason": null,
+            "items_returned": 5,
+            "fetched_at": "2026-05-29T04:38:09.429051+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 5,
+            "fetched_at": "2026-05-29T04:38:09.429051+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 2,
+        "tool": "concept_generator",
+        "ok": true,
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-sonnet-4-6",
+          "temperature": 0.9
+        },
+        "error_code": null
+      },
+      {
+        "step": 3,
+        "tool": "concept_generator",
+        "ok": true,
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-sonnet-4-6",
+          "temperature": 0.9
+        },
+        "error_code": null
+      },
+      {
+        "step": 4,
+        "tool": "app_existence_checker",
+        "ok": true,
+        "source_provenance": {
+          "appstore": {
+            "data_source": "real_api",
+            "endpoint": "https://itunes.apple.com/search",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-05-29T04:38:29.166033+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-05-29T04:38:29.166033+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 5,
+        "tool": "app_existence_checker",
+        "ok": true,
+        "source_provenance": {
+          "appstore": {
+            "data_source": "real_api",
+            "endpoint": "https://itunes.apple.com/search",
+            "fallback_reason": null,
+            "items_returned": 5,
+            "fetched_at": "2026-05-29T04:38:29.167464+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-05-29T04:38:29.167464+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 6,
+        "tool": "feasibility_checker",
+        "ok": true,
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-haiku-4-5-20251001",
+          "temperature": 0.3
+        },
+        "error_code": null
+      },
+      {
+        "step": 7,
+        "tool": "feasibility_checker",
+        "ok": true,
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-haiku-4-5-20251001",
+          "temperature": 0.3
+        },
+        "error_code": null
+      },
+      {
+        "step": 8,
+        "tool": "concept_generator",
+        "ok": true,
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-sonnet-4-6",
+          "temperature": 0.9
+        },
+        "error_code": null
+      },
+      {
+        "step": 9,
+        "tool": "concept_generator",
+        "ok": true,
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-sonnet-4-6",
+          "temperature": 0.9
+        },
+        "error_code": null
+      },
+      {
+        "step": 10,
+        "tool": "app_existence_checker",
+        "ok": true,
+        "source_provenance": {
+          "appstore": {
+            "data_source": "real_api",
+            "endpoint": "https://itunes.apple.com/search",
+            "fallback_reason": null,
+            "items_returned": 4,
+            "fetched_at": "2026-05-29T04:38:49.650222+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-05-29T04:38:49.650222+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 11,
+        "tool": "app_existence_checker",
+        "ok": true,
+        "source_provenance": {
+          "appstore": {
+            "data_source": "real_api",
+            "endpoint": "https://itunes.apple.com/search",
+            "fallback_reason": null,
+            "items_returned": 4,
+            "fetched_at": "2026-05-29T04:38:49.652003+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-05-29T04:38:49.652003+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 12,
+        "tool": "feasibility_checker",
+        "ok": true,
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-haiku-4-5-20251001",
+          "temperature": 0.3
+        },
+        "error_code": null
+      },
+      {
+        "step": 13,
+        "tool": "feasibility_checker",
+        "ok": true,
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-haiku-4-5-20251001",
+          "temperature": 0.3
+        },
+        "error_code": null
+      }
+    ]
   }
 }

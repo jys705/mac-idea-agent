@@ -1,64 +1,77 @@
 import requests
+from datetime import datetime, timezone
 from typing import Any
 from langchain_core.tools import tool
 
 
 # ── 실제 API 호출 함수 ──────────────────────────────────────
 
-def _search_appstore(query: str) -> list[dict]:
+ITUNES_ENDPOINT = "https://itunes.apple.com/search"
+GITHUB_ENDPOINT = "https://api.github.com/search/repositories"
+
+
+def _search_appstore(query: str) -> dict:
     """iTunes Search API 실제 호출"""
     try:
         res = requests.get(
-            "https://itunes.apple.com/search",
-            params={
-                "term": query,
-                "entity": "macSoftware",
-                "limit": 5
-            },
-            timeout=5
+            ITUNES_ENDPOINT,
+            params={"term": query, "entity": "macSoftware", "limit": 5},
+            timeout=5,
         )
         results = res.json().get("results", [])
-        return [
+        items = [
             {
                 "name": r.get("trackName", ""),
-                "description": r.get("description", "")[:100],
+                "description": (r.get("description") or "")[:100],
                 "rating": r.get("averageUserRating", 0),
                 "source": "appstore",
-                "url": r.get("trackViewUrl", "")
+                "url": r.get("trackViewUrl", ""),
             }
             for r in results
         ]
+        return {"items": items, "data_source": "real_api", "endpoint": ITUNES_ENDPOINT}
     except Exception as e:
-        return [{"error": str(e), "source": "appstore"}]
+        return {
+            "items": [],
+            "data_source": "fallback",
+            "endpoint": ITUNES_ENDPOINT,
+            "fallback_reason": f"appstore_request_failed: {e}",
+        }
 
 
-def _search_github(query: str) -> list[dict]:
+def _search_github(query: str) -> dict:
     """GitHub Search API 실제 호출"""
     try:
         res = requests.get(
-            "https://api.github.com/search/repositories",
+            GITHUB_ENDPOINT,
             params={
                 "q": f"{query} topic:macos",
                 "sort": "stars",
                 "order": "desc",
-                "per_page": 5
+                "per_page": 5,
             },
             headers={"Accept": "application/vnd.github.v3+json"},
-            timeout=5
+            timeout=5,
         )
-        items = res.json().get("items", [])
-        return [
+        items_raw = res.json().get("items", [])
+        items = [
             {
                 "name": item["name"],
                 "description": (item.get("description") or "")[:100],
                 "stars": item["stargazers_count"],
                 "source": "github",
-                "url": item["html_url"]
+                "url": item["html_url"],
             }
-            for item in items
+            for item in items_raw
         ]
+        return {"items": items, "data_source": "real_api", "endpoint": GITHUB_ENDPOINT}
     except Exception as e:
-        return [{"error": str(e), "source": "github"}]
+        return {
+            "items": [],
+            "data_source": "fallback",
+            "endpoint": GITHUB_ENDPOINT,
+            "fallback_reason": f"github_request_failed: {e}",
+        }
 
 
 def _is_similar(query: str, name: str, description: str) -> bool:
@@ -83,47 +96,53 @@ def app_existence_checker(concept: str, description: str = "") -> dict[str, Any]
 
     Returns:
         ok: 성공 여부
-        data: similar_app_found, similar_apps 목록
+        data: similar_app_found, similar_apps, source_provenance (각 검색 채널의 data_source/endpoint)
         error: 실패 시 에러 정보
     """
     query = f"{concept} {description}".strip()
+    fetched_at = datetime.now(timezone.utc).isoformat()
 
-    appstore_results = _search_appstore(concept)
-    github_results = _search_github(concept)
+    appstore = _search_appstore(concept)
+    github = _search_github(concept)
 
-    # 에러 체크
-    appstore_failed = any("error" in r for r in appstore_results)
-    github_failed = any("error" in r for r in github_results)
+    appstore_failed = appstore["data_source"] == "fallback"
+    github_failed = github["data_source"] == "fallback"
+
+    source_provenance = {
+        "appstore": {
+            "data_source": appstore["data_source"],
+            "endpoint": appstore.get("endpoint"),
+            "fallback_reason": appstore.get("fallback_reason"),
+            "items_returned": len(appstore.get("items", [])),
+            "fetched_at": fetched_at,
+        },
+        "github": {
+            "data_source": github["data_source"],
+            "endpoint": github.get("endpoint"),
+            "fallback_reason": github.get("fallback_reason"),
+            "items_returned": len(github.get("items", [])),
+            "fetched_at": fetched_at,
+        },
+    }
 
     if appstore_failed and github_failed:
         return {
             "ok": False,
-            "data": None,
+            "data": {"source_provenance": source_provenance},
             "error": {
                 "code": "SEARCH_FAILED",
                 "message": "App Store + GitHub 검색 모두 실패",
-                "fallback_action": "GitHub 단독 재시도 권장"
-            }
+                "fallback_action": "GitHub 단독 재시도 권장",
+            },
         }
 
-    # 유사 앱 판단
     similar_apps = []
-
-    if not appstore_failed:
-        for r in appstore_results:
-            if _is_similar(query, r.get("name", ""), r.get("description", "")):
-                similar_apps.append({
-                    **r,
-                    "similarity": "키워드 매칭"
-                })
-
-    if not github_failed:
-        for r in github_results:
-            if _is_similar(query, r.get("name", ""), r.get("description", "")):
-                similar_apps.append({
-                    **r,
-                    "similarity": "키워드 매칭"
-                })
+    for r in appstore.get("items", []):
+        if _is_similar(query, r.get("name", ""), r.get("description", "")):
+            similar_apps.append({**r, "similarity": "키워드 매칭"})
+    for r in github.get("items", []):
+        if _is_similar(query, r.get("name", ""), r.get("description", "")):
+            similar_apps.append({**r, "similarity": "키워드 매칭"})
 
     return {
         "ok": True,
@@ -132,8 +151,9 @@ def app_existence_checker(concept: str, description: str = "") -> dict[str, Any]
             "similar_apps": similar_apps,
             "searched": {
                 "appstore": not appstore_failed,
-                "github": not github_failed
-            }
+                "github": not github_failed,
+            },
+            "source_provenance": source_provenance,
         },
-        "error": None
+        "error": None,
     }
