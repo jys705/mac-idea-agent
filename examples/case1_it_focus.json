@@ -1,0 +1,62 @@
+{
+  "today_brief": {
+    "meme_trend": [],
+    "it_trend": [
+      "Claude Opus 4.8 AI 코딩 어시스턴트",
+      "build-your-own-x 학습 트렌드",
+      "public-apis 오픈 API 생태계",
+      "1인 개발자 dorm room 밀리언달러 제품",
+      "freeCodeCamp 오픈소스 학습 플랫폼"
+    ],
+    "concepts": [
+      {
+        "app_name": "TinyArchitect",
+        "description": "Claude가 '이거 직접 만들어봐'라고 속삭이는 메뉴바 학습 코치",
+        "core_feature": "복붙한 코드를 감지해 build-your-own 챌린지 알림 발사, Claude API 연동으로 해당 코드의 직접 구현 가이드 제공",
+        "similar_app_exists": false,
+        "difficulty": "2~3days",
+        "stack": [
+          "Swift",
+          "SwiftUI",
+          "AppKit",
+          "MenuBarExtra",
+          "Claude API",
+          "NSPasteboard"
+        ],
+        "vibe_coding_tip": "클립보드 모니터링은 Timer로 주기적 감지, Claude 응답은 async/await로 UI 블로킹 방지"
+      },
+      {
+        "app_name": "DormAPI",
+        "description": "메뉴바에서 무료 공개 API를 랜덤으로 골라 '오늘의 사이드 프로젝트' 아이디어를 던져주는 앱",
+        "core_feature": "public-apis 목록에서 랜덤 API 조합으로 밀리언달러 앱 아이디어 생성, 즐겨찾기 및 공유 기능",
+        "similar_app_exists": false,
+        "difficulty": "2~3days",
+        "stack": [
+          "Swift",
+          "SwiftUI",
+          "URLSession",
+          "Codable"
+        ],
+        "vibe_coding_tip": "public-apis JSON을 로컬에 저장하고 Codable로 파싱하면 네트워크 요청을 줄일 수 있습니다"
+      }
+    ]
+  },
+  "metadata": {
+    "used_tools": [
+      "trend_scanner",
+      "concept_generator",
+      "app_existence_checker",
+      "feasibility_checker"
+    ],
+    "loop_count": 0,
+    "failure_type": null,
+    "fallback_action": null,
+    "sources": {
+      "meme": [],
+      "it": [
+        "hackernews",
+        "github"
+      ]
+    }
+  }
+}

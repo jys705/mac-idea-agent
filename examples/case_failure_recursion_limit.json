@@ -1,0 +1,10 @@
+{
+  "today_brief": null,
+  "metadata": {
+    "used_tools": [],
+    "loop_count": 0,
+    "failure_type": "agent_error",
+    "fallback_action": null,
+    "error": "Recursion limit of 15 reached without hitting a stop condition. You can increase the limit by setting the `recursion_limit` config key.\nFor troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/GRAPH_RECURSION_LIMIT"
+  }
+}

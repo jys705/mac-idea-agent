@@ -1,0 +1,80 @@
+{
+  "today_brief": {
+    "meme_trend": [
+      "카피바라 느긋함",
+      "카피바라 밈",
+      "게 사이드워크 밈",
+      "Italian Brainrot 밈",
+      "고양이 찰떡 밈",
+      "NPC 챌린지"
+    ],
+    "it_trend": [
+      "Claude Opus 4.8",
+      "build-your-own-x",
+      "Cars are trying to spy on you",
+      "public-apis",
+      "freeCodeCamp"
+    ],
+    "concepts": [
+      {
+        "app_name": "CapybaraClaude",
+        "description": "Claude가 카피바라처럼 느긋하게 코드 리뷰를 미뤄주는 메뉴바 앱",
+        "core_feature": "AI가 '나중에 봐도 돼~' 식의 느긋한 리뷰 우선순위 조언. Claude API 응답 스트리밍으로 느긋한 답변 연출",
+        "similar_app_exists": false,
+        "difficulty": "2~3days",
+        "stack": [
+          "Swift",
+          "SwiftUI",
+          "MenuBarExtra",
+          "Claude API",
+          "URLSession"
+        ],
+        "vibe_coding_tip": "Claude API 응답 스트리밍으로 느긋한 답변 연출하기",
+        "concept_basis": {
+          "meme": "카피바라 느긋함",
+          "it": "Claude Opus 4.8"
+        }
+      },
+      {
+        "app_name": "Tralalero Builder",
+        "description": "Italian Brainrot 캐릭터가 당신만의 개발 튜토리얼 로드맵을 뚝딱 생성해주는 메뉴바 앱",
+        "core_feature": "키워드 입력 시 밈 캐릭터가 build-your-own-x 학습 경로 생성",
+        "similar_app_exists": false,
+        "difficulty": "2~3days",
+        "stack": [
+          "Swift",
+          "SwiftUI",
+          "URLSession",
+          "OpenAI API",
+          "Combine"
+        ],
+        "vibe_coding_tip": "API 응답 스트리밍 처리와 UI 상태 동기화가 핵심. 먼저 목업으로 UI 완성하세요.",
+        "concept_basis": {
+          "meme": "Italian Brainrot 밈",
+          "it": "build-your-own-x"
+        }
+      }
+    ]
+  },
+  "metadata": {
+    "used_tools": [
+      "trend_scanner",
+      "concept_generator",
+      "app_existence_checker",
+      "feasibility_checker"
+    ],
+    "loop_count": 0,
+    "failure_type": null,
+    "fallback_action": null,
+    "sources": {
+      "meme": [
+        "reddit_mock",
+        "youtube_mock"
+      ],
+      "it": [
+        "hackernews",
+        "github"
+      ]
+    }
+  }
+}

@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+.env
+__pycache__/
+*.pyc
+
+# Project-specific exclusions (kept locally, not pushed to public repo)
+.kiro/
+kiro/
+CLAUDE.md
+README2.md
+design_v2.md
