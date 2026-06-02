@@ -67,7 +67,57 @@ def check_guardrail(user_query: str) -> dict[str, Any]:
 
 # ── Tool Trace 추출 ────────────────────────────────────────
 
+def _extract_key_result(tool_name: str, data: dict) -> dict | None:
+    """
+    8주차 피드백 반영: 각 Tool의 핵심 관찰 결과(observation)를 요약한다.
+    "단순히 기능이 호출됐다"가 아니라 "결과를 보고 다음 판단이 어떻게 바뀌었는지"
+    파악할 수 있도록 핵심 필드만 추출한다.
+    """
+    if not isinstance(data, dict):
+        return None
+
+    if tool_name == "trend_scanner":
+        meme = [t.get("keyword") for t in data.get("meme_trends", []) if t.get("keyword")]
+        it = [t.get("keyword") for t in data.get("it_trends", []) if t.get("keyword")]
+        partial = data.get("partial_failure", [])
+        return {
+            "top_meme_keywords": meme[:3],
+            "top_it_keywords": it[:3],
+            "partial_failure": partial,
+        }
+
+    if tool_name == "concept_generator":
+        return {
+            "app_name": data.get("app_name"),
+            "description": data.get("description"),
+            "concept_basis": data.get("concept_basis"),
+        }
+
+    if tool_name == "app_existence_checker":
+        similar = data.get("similar_apps", [])
+        return {
+            "similar_app_found": data.get("similar_app_found"),
+            "similar_app_names": [a.get("name") for a in similar if a.get("name")],
+            "next_action": "concept_generator 재호출 (루프백)" if data.get("similar_app_found") else "feasibility_checker 진행",
+        }
+
+    if tool_name == "feasibility_checker":
+        return {
+            "difficulty": data.get("difficulty"),
+            "stack": data.get("stack"),
+            "difficulty_limit_exceeded": data.get("difficulty_limit_exceeded"),
+            "vibe_coding_tip": data.get("vibe_coding_tip"),
+        }
+
+    return None
+
+
 def _extract_tool_trace(messages: list) -> list[dict]:
+    """
+    LangGraph 실행 messages에서 tool_call → tool_result 쌍을 추출한다.
+    각 step에 key_result(핵심 관찰 결과)를 추가하여
+    다음 판단이 어떻게 바뀌었는지 추적 가능하게 한다.
+    """
     call_id_to_name: dict[str, str] = {}
     for m in messages:
         if isinstance(m, AIMessage):
@@ -106,10 +156,14 @@ def _extract_tool_trace(messages: list) -> list[dict]:
             provenance = data.get("source_provenance")
         err = parsed.get("error") if isinstance(parsed, dict) else None
 
+        # 8주차 피드백: 핵심 관찰 결과 추출
+        key_result = _extract_key_result(tool_name, data) if isinstance(data, dict) else None
+
         trace.append({
             "step": step,
             "tool": tool_name,
             "ok": ok,
+            "key_result": key_result,           # ← 8주차 추가
             "source_provenance": provenance,
             "error_code": (err or {}).get("code") if isinstance(err, dict) else None,
         })
@@ -231,27 +285,66 @@ def run_agent(
             return result
 
     except Exception as e:
-        print(f"[Agent 오류] {e}")
+        error_str = str(e)
         partial_trace = _extract_tool_trace(accumulated_messages) if accumulated_messages else []
-        result = {
-            "today_brief": None,
-            "metadata": {
-                "used_tools": [t["tool"] for t in partial_trace],
-                "loop_count": 0,
-                "failure_type": "agent_error",
-                "fallback_action": None,
-                "error": str(e),
-                "tool_trace": partial_trace,
-            },
-        }
-        save_trace(
-            user_input=user_query,
-            trend_focus=trend_focus,
-            difficulty_limit=difficulty_limit,
-            exclude_existing=exclude_existing,
-            messages=accumulated_messages,
-            final_result=result,
-            started_at=started_at,
-            stop_reason="agent_error",
-        )
+
+        # 7주차 피드백 반영: recursion_limit 발동 시 사용자 이해 가능한 fallback 응답
+        if "Recursion limit" in error_str or "recursion_limit" in error_str.lower():
+            print(f"[루프 제한 도달] {error_str}")
+            concepts_so_far = []
+            for t in partial_trace:
+                if t["tool"] == "concept_generator" and t.get("key_result"):
+                    name = t["key_result"].get("app_name")
+                    desc = t["key_result"].get("description")
+                    if name:
+                        concepts_so_far.append({"app_name": name, "description": desc})
+
+            result = {
+                "today_brief": {
+                    "meme_trend": [],
+                    "it_trend": [],
+                    "concepts": concepts_so_far,
+                    "notice": "유사 앱 탐색 반복으로 최대 단계에 도달했습니다. 조건을 완화하거나 다른 트렌드로 재시도해주세요.",
+                },
+                "metadata": {
+                    "used_tools": list(dict.fromkeys(t["tool"] for t in partial_trace)),
+                    "loop_count": sum(1 for t in partial_trace if t["tool"] == "concept_generator"),
+                    "failure_type": "loop_overflow",
+                    "fallback_action": "부분 결과 반환 — 루프 제한 도달. exclude_existing 해제 또는 difficulty_limit 완화 권장",
+                    "tool_trace": partial_trace,
+                },
+            }
+            save_trace(
+                user_input=user_query,
+                trend_focus=trend_focus,
+                difficulty_limit=difficulty_limit,
+                exclude_existing=exclude_existing,
+                messages=accumulated_messages,
+                final_result=result,
+                started_at=started_at,
+                stop_reason="loop_overflow",
+            )
+        else:
+            print(f"[Agent 오류] {error_str}")
+            result = {
+                "today_brief": None,
+                "metadata": {
+                    "used_tools": [t["tool"] for t in partial_trace],
+                    "loop_count": 0,
+                    "failure_type": "agent_error",
+                    "fallback_action": None,
+                    "error": error_str,
+                    "tool_trace": partial_trace,
+                },
+            }
+            save_trace(
+                user_input=user_query,
+                trend_focus=trend_focus,
+                difficulty_limit=difficulty_limit,
+                exclude_existing=exclude_existing,
+                messages=accumulated_messages,
+                final_result=result,
+                started_at=started_at,
+                stop_reason="agent_error",
+            )
         return result
