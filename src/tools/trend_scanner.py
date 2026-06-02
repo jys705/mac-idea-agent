@@ -4,11 +4,14 @@ from datetime import datetime, timezone
 from typing import Any
 from langchain_core.tools import tool
 
-# ── 실제 API 호출 함수 ──────────────────────────────────────
+# ── 엔드포인트 상수 ────────────────────────────────────────
 
 HN_ENDPOINT = "https://hacker-news.firebaseio.com/v0/topstories.json"
 GITHUB_ENDPOINT = "https://api.github.com/search/repositories"
+YOUTUBE_ENDPOINT = "https://www.googleapis.com/youtube/v3/videos"
 
+
+# ── 실제 API 호출 함수 ──────────────────────────────────────
 
 def _fetch_hackernews(limit: int = 5) -> dict:
     """HackerNews Top Stories 실제 API 호출"""
@@ -75,8 +78,62 @@ def _fetch_github_trending(limit: int = 5) -> dict:
         }
 
 
+def _fetch_youtube(limit: int = 5) -> dict:
+    """YouTube Data API v3 mostPopular 실제 호출"""
+    api_key = os.getenv("YOUTUBE_API_KEY")
+    if not api_key:
+        return {
+            "items": [],
+            "data_source": "mock",
+            "endpoint": None,
+            "fallback_reason": "youtube_api_key_not_configured",
+        }
+    try:
+        res = requests.get(
+            YOUTUBE_ENDPOINT,
+            params={
+                "part": "snippet,statistics",
+                "chart": "mostPopular",
+                "regionCode": "US",
+                "maxResults": limit,
+                "key": api_key,
+            },
+            timeout=5,
+        )
+        res.raise_for_status()
+        raw_items = res.json().get("items", [])
+        parsed = []
+        for item in raw_items:
+            snippet = item.get("snippet", {})
+            stats = item.get("statistics", {})
+            title = snippet.get("title", "")
+            tags = snippet.get("tags", [])
+            # 태그가 있으면 태그 기반, 없으면 제목 기반 키워드
+            keyword = tags[0] if tags else title
+            parsed.append({
+                "keyword": keyword,
+                "title": title,
+                "source": "youtube",
+                "url": f"https://youtube.com/watch?v={item.get('id', '')}",
+                "views": int(stats.get("viewCount", 0)),
+            })
+        return {
+            "items": parsed,
+            "data_source": "real_api",
+            "endpoint": YOUTUBE_ENDPOINT,
+        }
+    except Exception as e:
+        # API 키는 있지만 호출 실패 → fallback (7주차 피드백: 실패 시 partial_failure 처리)
+        return {
+            "items": [],
+            "data_source": "fallback",
+            "endpoint": YOUTUBE_ENDPOINT,
+            "fallback_reason": f"youtube_request_failed: {e}",
+        }
+
+
 def _fetch_reddit_mock(limit: int = 3) -> dict:
-    """Reddit 밈 트렌드 — Mock (OAuth 미연동, API 응답 구조와 동일한 필드 유지)"""
+    """Reddit 밈 트렌드 — Mock (OAuth 미연동)"""
     items = [
         {"keyword": "카피바라 밈", "source": "reddit_mock",
          "url": "https://reddit.com/r/memes", "score": 94200},
@@ -93,30 +150,14 @@ def _fetch_reddit_mock(limit: int = 3) -> dict:
     }
 
 
-def _fetch_youtube_mock(limit: int = 3) -> dict:
-    """YouTube Shorts 밈 트렌드 — Mock (API Key 미설정, API 응답 구조와 동일한 필드 유지)"""
-    items = [
-        {"keyword": "카피바라 느긋함", "source": "youtube_mock",
-         "url": "https://youtube.com/shorts/example1", "views": 4200000},
-        {"keyword": "고양이 찰떡 밈", "source": "youtube_mock",
-         "url": "https://youtube.com/shorts/example2", "views": 3100000},
-        {"keyword": "NPC 챌린지", "source": "youtube_mock",
-         "url": "https://youtube.com/shorts/example3", "views": 2800000},
-    ][:limit]
-    return {
-        "items": items,
-        "data_source": "mock",
-        "endpoint": None,
-        "fallback_reason": "youtube_api_key_not_configured",
-    }
-
-
 # ── LangChain Tool 정의 ────────────────────────────────────
 
 @tool
 def trend_scanner(trend_type: str = "both", limit: int = 5) -> dict[str, Any]:
     """
     Reddit·YouTube·GitHub·HackerNews에서 오늘의 밈 및 IT 트렌드 키워드를 실시간 수집한다.
+    YouTube API Key가 설정된 경우 실제 API를 호출하고, 미설정 시 Mock으로 fallback한다.
+    YouTube API 호출 실패 시 partial_failure로 기록하고 Reddit Mock으로 계속 진행한다.
 
     Args:
         trend_type: 수집 유형. "meme" = 밈만, "IT" = IT 트렌드만, "both" = 둘 다 (기본값)
@@ -124,7 +165,7 @@ def trend_scanner(trend_type: str = "both", limit: int = 5) -> dict[str, Any]:
 
     Returns:
         ok: 성공 여부
-        data: meme_trends, it_trends, source_provenance (각 소스의 data_source/endpoint)
+        data: meme_trends, it_trends, source_provenance
         error: 실패 시 에러 정보
     """
     result: dict[str, Any] = {
@@ -147,7 +188,7 @@ def trend_scanner(trend_type: str = "both", limit: int = 5) -> dict[str, Any]:
     # 밈 트렌드 수집
     if trend_type in ("meme", "both"):
         reddit = _fetch_reddit_mock(limit)
-        youtube = _fetch_youtube_mock(limit)
+        youtube = _fetch_youtube(limit)  # ← Mock → 실제 API
         _record("reddit", reddit)
         _record("youtube", youtube)
 
