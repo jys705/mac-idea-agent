@@ -132,22 +132,38 @@ def _fetch_youtube(limit: int = 5) -> dict:
         }
 
 
-def _fetch_reddit_mock(limit: int = 3) -> dict:
-    """Reddit 밈 트렌드 — Mock (OAuth 미연동)"""
-    items = [
-        {"keyword": "카피바라 밈", "source": "reddit_mock",
-         "url": "https://reddit.com/r/memes", "score": 94200},
-        {"keyword": "게 사이드워크 밈", "source": "reddit_mock",
-         "url": "https://reddit.com/r/dankmemes", "score": 67400},
-        {"keyword": "Italian Brainrot 밈", "source": "reddit_mock",
-         "url": "https://reddit.com/r/memes", "score": 52100},
-    ][:limit]
-    return {
-        "items": items,
-        "data_source": "mock",
-        "endpoint": None,
-        "fallback_reason": "reddit_oauth_not_configured",
-    }
+def _fetch_reddit(limit: int = 5) -> dict:
+    """meme-api.com 경유 Reddit 밈 트렌드 (OAuth 불필요, 무료)"""
+    MEME_API_ENDPOINT = "https://meme-api.com/gimme/memes"
+    try:
+        res = requests.get(
+            f"{MEME_API_ENDPOINT}/{limit}",
+            timeout=5,
+        )
+        res.raise_for_status()
+        memes = res.json().get("memes", [])
+        items = [
+            {
+                "keyword": m["title"],
+                "source": "reddit",
+                "url": m["postLink"],
+                "score": m.get("ups", 0),
+            }
+            for m in memes
+            if not m.get("nsfw", False)
+        ]
+        return {
+            "items": items,
+            "data_source": "real_api",
+            "endpoint": MEME_API_ENDPOINT,
+        }
+    except Exception as e:
+        return {
+            "items": [],
+            "data_source": "fallback",
+            "endpoint": MEME_API_ENDPOINT,
+            "fallback_reason": f"meme_api_request_failed: {e}",
+        }
 
 
 # ── LangChain Tool 정의 ────────────────────────────────────
@@ -187,7 +203,7 @@ def trend_scanner(trend_type: str = "both", limit: int = 5) -> dict[str, Any]:
 
     # 밈 트렌드 수집
     if trend_type in ("meme", "both"):
-        reddit = _fetch_reddit_mock(limit)
+        reddit = _fetch_reddit(limit)
         youtube = _fetch_youtube(limit)  # ← Mock → 실제 API
         _record("reddit", reddit)
         _record("youtube", youtube)
