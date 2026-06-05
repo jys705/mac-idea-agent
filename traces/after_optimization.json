@@ -1,0 +1,273 @@
+{
+  "today_brief": {
+    "meme_trend": [],
+    "it_trend": [
+      "databow: Rust CLI로 ADBC 드라이버 기반 DB 쿼리",
+      "Redis 8.8: 새 배열 자료구조·레이트 리미터·성능 개선",
+      "build-your-own-x 열풍 (GitHub 512k stars)",
+      "Ladybird 브라우저 개발 방식 변경",
+      "GNSS 간섭 소스 추적 연구"
+    ],
+    "concepts": [
+      {
+        "app_name": "QueryKit",
+        "description": "나만의 미니 DB 쿼리 런처를 메뉴바에서 직접 조립하는 앱",
+        "core_feature": "ADBC 드라이버를 블록처럼 꽂아 커스텀 쿼리 단축키 생성. 메뉴바에서 드라이버 선택 → 쿼리 템플릿 저장 → 단축키 한 번으로 즉시 실행",
+        "similar_app_exists": false,
+        "difficulty": "1week",
+        "stack": [
+          "Swift",
+          "SwiftUI",
+          "AppKit",
+          "MenuBarExtra",
+          "ADBC SDK",
+          "Keychain"
+        ],
+        "vibe_coding_tip": "ADBC 드라이버 동적 로딩과 쿼리 결과 캐싱을 먼저 구현하세요.",
+        "concept_basis": {
+          "meme": "build-your-own-x 열풍",
+          "it": "databow: Rust CLI로 ADBC 드라이버 기반 DB 쿼리"
+        }
+      },
+      {
+        "app_name": "RedisBuddy",
+        "description": "나만의 미니 Redis를 메뉴바에서 직접 만들며 배우는 귀여운 학습 앱",
+        "core_feature": "배열·레이트리미터를 직접 구현하며 Redis 8.8 핵심 개념 체험. 단계별 미션 클리어 방식으로 자료구조 내부 동작 시각화",
+        "similar_app_exists": false,
+        "difficulty": "1week",
+        "stack": [
+          "Swift",
+          "SwiftUI",
+          "AppKit",
+          "Combine",
+          "Redis client library"
+        ],
+        "vibe_coding_tip": "배열과 레이트리미터 자체 구현에 집중하고, Redis 연동은 라이브러리 활용으로 시간 절약하세요.",
+        "concept_basis": {
+          "meme": "build-your-own-x 열풍",
+          "it": "Redis 8.8: 새 배열 자료구조·레이트 리미터·성능 개선"
+        }
+      }
+    ]
+  },
+  "metadata": {
+    "used_tools": [
+      "trend_scanner",
+      "concept_generator",
+      "concept_generator",
+      "app_existence_checker",
+      "app_existence_checker",
+      "feasibility_checker",
+      "feasibility_checker"
+    ],
+    "loop_count": 0,
+    "failure_type": null,
+    "fallback_action": null,
+    "sources": {
+      "meme": [],
+      "it": [
+        {
+          "keyword": "databow: Rust CLI로 ADBC 드라이버 기반 DB 쿼리",
+          "source": "hackernews",
+          "score": 49
+        },
+        {
+          "keyword": "Redis 8.8: 새 배열 자료구조·레이트 리미터·성능 개선",
+          "source": "hackernews",
+          "score": 8
+        },
+        {
+          "keyword": "build-your-own-x",
+          "source": "github",
+          "stars": 512077
+        },
+        {
+          "keyword": "Changing How We Develop Ladybird",
+          "source": "hackernews",
+          "score": 401
+        },
+        {
+          "keyword": "Tracing a powerful GNSS interference source over Europe",
+          "source": "hackernews",
+          "score": 116
+        }
+      ]
+    },
+    "trend_focus_applied": "IT",
+    "difficulty_limit_applied": null,
+    "exclude_existing_applied": false,
+    "total_steps_used": 7,
+    "tool_trace": [
+      {
+        "step": 1,
+        "tool": "trend_scanner",
+        "ok": true,
+        "key_result": {
+          "top_meme_keywords": [],
+          "top_it_keywords": [
+            "Tracing a powerful GNSS interference source over Europe",
+            "Changing How We Develop Ladybird",
+            "Entanglement Builds Space-Time. Now \"Magic\" Gives It Gravity"
+          ],
+          "partial_failure": []
+        },
+        "source_provenance": {
+          "hackernews": {
+            "data_source": "real_api",
+            "endpoint": "https://hacker-news.firebaseio.com/v0/topstories.json",
+            "fallback_reason": null,
+            "items_returned": 5,
+            "fetched_at": "2026-06-05T11:59:45.884442+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 5,
+            "fetched_at": "2026-06-05T11:59:45.884442+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 2,
+        "tool": "concept_generator",
+        "ok": true,
+        "key_result": {
+          "app_name": "QueryKit",
+          "description": "나만의 미니 DB 쿼리 런처를 메뉴바에서 직접 조립하는 앱",
+          "concept_basis": {
+            "meme": "build-your-own-x 열풍",
+            "it": "databow: Rust CLI로 ADBC 드라이버 기반 DB 쿼리"
+          }
+        },
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-sonnet-4-6",
+          "temperature": 0.9
+        },
+        "error_code": null
+      },
+      {
+        "step": 3,
+        "tool": "concept_generator",
+        "ok": true,
+        "key_result": {
+          "app_name": "RedisBuddy",
+          "description": "나만의 미니 Redis를 메뉴바에서 직접 만들며 배우는 귀여운 학습 앱",
+          "concept_basis": {
+            "meme": "build-your-own-x 열풍",
+            "it": "Redis 8.8: 새 배열 자료구조·레이트 리미터·성능 개선"
+          }
+        },
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-sonnet-4-6",
+          "temperature": 0.9
+        },
+        "error_code": null
+      },
+      {
+        "step": 4,
+        "tool": "app_existence_checker",
+        "ok": true,
+        "key_result": {
+          "similar_app_found": false,
+          "similar_app_names": [],
+          "next_action": "feasibility_checker 진행"
+        },
+        "source_provenance": {
+          "appstore": {
+            "data_source": "real_api",
+            "endpoint": "https://itunes.apple.com/search",
+            "fallback_reason": null,
+            "items_returned": 4,
+            "fetched_at": "2026-06-05T12:00:03.875785+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-06-05T12:00:03.875785+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 5,
+        "tool": "app_existence_checker",
+        "ok": true,
+        "key_result": {
+          "similar_app_found": false,
+          "similar_app_names": [],
+          "next_action": "feasibility_checker 진행"
+        },
+        "source_provenance": {
+          "appstore": {
+            "data_source": "real_api",
+            "endpoint": "https://itunes.apple.com/search",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-06-05T12:00:03.878306+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-06-05T12:00:03.878306+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 6,
+        "tool": "feasibility_checker",
+        "ok": true,
+        "key_result": {
+          "difficulty": "1week",
+          "stack": [
+            "Swift",
+            "SwiftUI",
+            "AppKit",
+            "MenuBarExtra",
+            "ADBC SDK",
+            "Keychain"
+          ],
+          "difficulty_limit_exceeded": false,
+          "vibe_coding_tip": "ADBC 드라이버 동적 로딩과 쿼리 결과 캐싱을 먼저 구현하세요."
+        },
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-haiku-4-5-20251001",
+          "temperature": 0.3
+        },
+        "error_code": null
+      },
+      {
+        "step": 7,
+        "tool": "feasibility_checker",
+        "ok": true,
+        "key_result": {
+          "difficulty": "1week",
+          "stack": [
+            "Swift",
+            "SwiftUI",
+            "AppKit",
+            "Combine",
+            "Redis client library"
+          ],
+          "difficulty_limit_exceeded": false,
+          "vibe_coding_tip": "배열과 레이트리미터 자체 구현에 집중하고, Redis 연동은 라이브러리 활용으로 시간 절약하세요."
+        },
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-haiku-4-5-20251001",
+          "temperature": 0.3
+        },
+        "error_code": null
+      }
+    ]
+  }
+}

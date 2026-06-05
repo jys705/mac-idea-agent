@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from langchain_anthropic import ChatAnthropic
 from langgraph.prebuilt import create_react_agent
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
 
 from src.tools import tools
 from src.prompts.system_prompt import SYSTEM_PROMPT
@@ -15,7 +15,7 @@ from src.observability import save_trace
 
 load_dotenv()
 
-# ── LLM 초기화 (Agent 판단용 — Sonnet) ────────────────────
+# ── LLM 초기화 ─────────────────────────────────────────────
 
 _llm = ChatAnthropic(
     model="claude-sonnet-4-6",
@@ -24,12 +24,61 @@ _llm = ChatAnthropic(
     anthropic_api_key=os.getenv("ANTHROPIC_API_KEY")
 )
 
+
+# ── 9주차 최적화: Tool result 축소 ─────────────────────────
+# source_provenance는 Observability용 메타데이터.
+# LLM 판단(ok, data 핵심 필드)에는 불필요하므로 제거하여
+# 누적되는 input token을 줄인다.
+
+def _slim_tool_observations(messages: list) -> list:
+    """
+    LLM에 전달되기 직전, ToolMessage에서 source_provenance를 제거한다.
+    accumulated_messages (원본)에는 source_provenance가 보존되므로
+    trace 파일 및 _extract_tool_trace에 영향 없음.
+    """
+    result = []
+    for msg in messages:
+        if isinstance(msg, ToolMessage):
+            try:
+                content = json.loads(msg.content)
+                if isinstance(content, dict) and isinstance(content.get("data"), dict):
+                    slim_data = {
+                        k: v for k, v in content["data"].items()
+                        if k != "source_provenance"
+                    }
+                    slim_content = {**content, "data": slim_data}
+                    result.append(ToolMessage(
+                        content=json.dumps(slim_content, ensure_ascii=False),
+                        tool_call_id=msg.tool_call_id,
+                        name=getattr(msg, "name", msg.tool_call_id),
+                        status=getattr(msg, "status", "success"),
+                    ))
+                else:
+                    result.append(msg)
+            except Exception:
+                result.append(msg)
+        else:
+            result.append(msg)
+    return result
+
+
+def _build_prompt(state: dict | list) -> list:
+    """
+    매 LLM 호출 전 실행:
+    1. source_provenance 제거 (tool result 축소)
+    2. SystemMessage 추가
+    """
+    messages = state["messages"] if isinstance(state, dict) else state
+    slimmed = _slim_tool_observations(messages)
+    return [SystemMessage(content=SYSTEM_PROMPT)] + slimmed
+
+
 # ── Agent 생성 ─────────────────────────────────────────────
 
 agent = create_react_agent(
     model=_llm,
     tools=tools,
-    prompt=SYSTEM_PROMPT,
+    prompt=_build_prompt,   # ← 9주차: callable로 교체
 )
 
 
@@ -68,31 +117,24 @@ def check_guardrail(user_query: str) -> dict[str, Any]:
 # ── Tool Trace 추출 ────────────────────────────────────────
 
 def _extract_key_result(tool_name: str, data: dict) -> dict | None:
-    """
-    8주차 피드백 반영: 각 Tool의 핵심 관찰 결과(observation)를 요약한다.
-    "단순히 기능이 호출됐다"가 아니라 "결과를 보고 다음 판단이 어떻게 바뀌었는지"
-    파악할 수 있도록 핵심 필드만 추출한다.
-    """
+    """각 Tool의 핵심 관찰 결과 요약 (8주차 피드백)"""
     if not isinstance(data, dict):
         return None
 
     if tool_name == "trend_scanner":
         meme = [t.get("keyword") for t in data.get("meme_trends", []) if t.get("keyword")]
         it = [t.get("keyword") for t in data.get("it_trends", []) if t.get("keyword")]
-        partial = data.get("partial_failure", [])
         return {
             "top_meme_keywords": meme[:3],
             "top_it_keywords": it[:3],
-            "partial_failure": partial,
+            "partial_failure": data.get("partial_failure", []),
         }
-
     if tool_name == "concept_generator":
         return {
             "app_name": data.get("app_name"),
             "description": data.get("description"),
             "concept_basis": data.get("concept_basis"),
         }
-
     if tool_name == "app_existence_checker":
         similar = data.get("similar_apps", [])
         return {
@@ -100,7 +142,6 @@ def _extract_key_result(tool_name: str, data: dict) -> dict | None:
             "similar_app_names": [a.get("name") for a in similar if a.get("name")],
             "next_action": "concept_generator 재호출 (루프백)" if data.get("similar_app_found") else "feasibility_checker 진행",
         }
-
     if tool_name == "feasibility_checker":
         return {
             "difficulty": data.get("difficulty"),
@@ -108,15 +149,14 @@ def _extract_key_result(tool_name: str, data: dict) -> dict | None:
             "difficulty_limit_exceeded": data.get("difficulty_limit_exceeded"),
             "vibe_coding_tip": data.get("vibe_coding_tip"),
         }
-
     return None
 
 
 def _extract_tool_trace(messages: list) -> list[dict]:
     """
-    LangGraph 실행 messages에서 tool_call → tool_result 쌍을 추출한다.
-    각 step에 key_result(핵심 관찰 결과)를 추가하여
-    다음 판단이 어떻게 바뀌었는지 추적 가능하게 한다.
+    accumulated_messages (원본, source_provenance 포함)에서 trace 추출.
+    _slim_tool_observations로 slimming한 버전이 아닌 원본을 사용하므로
+    provenance 정보가 그대로 보존됨.
     """
     call_id_to_name: dict[str, str] = {}
     for m in messages:
@@ -155,15 +195,13 @@ def _extract_tool_trace(messages: list) -> list[dict]:
         if isinstance(data, dict):
             provenance = data.get("source_provenance")
         err = parsed.get("error") if isinstance(parsed, dict) else None
-
-        # 8주차 피드백: 핵심 관찰 결과 추출
         key_result = _extract_key_result(tool_name, data) if isinstance(data, dict) else None
 
         trace.append({
             "step": step,
             "tool": tool_name,
             "ok": ok,
-            "key_result": key_result,           # ← 8주차 추가
+            "key_result": key_result,
             "source_provenance": provenance,
             "error_code": (err or {}).get("code") if isinstance(err, dict) else None,
         })
@@ -180,10 +218,10 @@ def run_agent(
 ) -> dict[str, Any]:
     started_at = time.time()
 
-    # 가드레일 선검사
+    # 가드레일
     guard = check_guardrail(user_query)
     if guard["blocked"]:
-        print(f"\n[가드레일 차단] reason={guard['reason']} pattern={guard['matched_pattern']}")
+        print(f"\n[가드레일 차단] reason={guard['reason']}")
         result = {
             "today_brief": None,
             "metadata": {
@@ -196,15 +234,10 @@ def run_agent(
             },
         }
         save_trace(
-            user_input=user_query,
-            trend_focus=trend_focus,
-            difficulty_limit=difficulty_limit,
-            exclude_existing=exclude_existing,
-            messages=[],
-            final_result=result,
-            started_at=started_at,
-            stop_reason="guardrail_blocked",
-            guardrail_blocked=True,
+            user_input=user_query, trend_focus=trend_focus,
+            difficulty_limit=difficulty_limit, exclude_existing=exclude_existing,
+            messages=[], final_result=result, started_at=started_at,
+            stop_reason="guardrail_blocked", guardrail_blocked=True,
         )
         return result
 
@@ -249,13 +282,9 @@ def run_agent(
             parsed["metadata"]["tool_trace"] = tool_trace
 
             save_trace(
-                user_input=user_query,
-                trend_focus=trend_focus,
-                difficulty_limit=difficulty_limit,
-                exclude_existing=exclude_existing,
-                messages=messages,
-                final_result=parsed,
-                started_at=started_at,
+                user_input=user_query, trend_focus=trend_focus,
+                difficulty_limit=difficulty_limit, exclude_existing=exclude_existing,
+                messages=messages, final_result=parsed, started_at=started_at,
                 stop_reason="final_answer",
             )
             return parsed
@@ -273,13 +302,9 @@ def run_agent(
                 },
             }
             save_trace(
-                user_input=user_query,
-                trend_focus=trend_focus,
-                difficulty_limit=difficulty_limit,
-                exclude_existing=exclude_existing,
-                messages=messages,
-                final_result=result,
-                started_at=started_at,
+                user_input=user_query, trend_focus=trend_focus,
+                difficulty_limit=difficulty_limit, exclude_existing=exclude_existing,
+                messages=messages, final_result=result, started_at=started_at,
                 stop_reason="json_parse_error",
             )
             return result
@@ -288,7 +313,6 @@ def run_agent(
         error_str = str(e)
         partial_trace = _extract_tool_trace(accumulated_messages) if accumulated_messages else []
 
-        # 7주차 피드백 반영: recursion_limit 발동 시 사용자 이해 가능한 fallback 응답
         if "Recursion limit" in error_str or "recursion_limit" in error_str.lower():
             print(f"[루프 제한 도달] {error_str}")
             concepts_so_far = []
@@ -301,8 +325,7 @@ def run_agent(
 
             result = {
                 "today_brief": {
-                    "meme_trend": [],
-                    "it_trend": [],
+                    "meme_trend": [], "it_trend": [],
                     "concepts": concepts_so_far,
                     "notice": "유사 앱 탐색 반복으로 최대 단계에 도달했습니다. 조건을 완화하거나 다른 트렌드로 재시도해주세요.",
                 },
@@ -315,14 +338,10 @@ def run_agent(
                 },
             }
             save_trace(
-                user_input=user_query,
-                trend_focus=trend_focus,
-                difficulty_limit=difficulty_limit,
-                exclude_existing=exclude_existing,
-                messages=accumulated_messages,
-                final_result=result,
-                started_at=started_at,
-                stop_reason="loop_overflow",
+                user_input=user_query, trend_focus=trend_focus,
+                difficulty_limit=difficulty_limit, exclude_existing=exclude_existing,
+                messages=accumulated_messages, final_result=result,
+                started_at=started_at, stop_reason="loop_overflow",
             )
         else:
             print(f"[Agent 오류] {error_str}")
@@ -338,13 +357,9 @@ def run_agent(
                 },
             }
             save_trace(
-                user_input=user_query,
-                trend_focus=trend_focus,
-                difficulty_limit=difficulty_limit,
-                exclude_existing=exclude_existing,
-                messages=accumulated_messages,
-                final_result=result,
-                started_at=started_at,
-                stop_reason="agent_error",
+                user_input=user_query, trend_focus=trend_focus,
+                difficulty_limit=difficulty_limit, exclude_existing=exclude_existing,
+                messages=accumulated_messages, final_result=result,
+                started_at=started_at, stop_reason="agent_error",
             )
         return result
