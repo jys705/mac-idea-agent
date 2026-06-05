@@ -15,6 +15,15 @@ from src.observability import save_trace
 
 load_dotenv()
 
+
+# ── 커스텀 예외 ────────────────────────────────────────────
+
+class LoopLimitReached(Exception):
+    def __init__(self, count: int):
+        self.count = count
+        super().__init__(f"concept_generator {count}회 호출 초과")
+
+
 # ── LLM 초기화 ─────────────────────────────────────────────
 
 _llm = ChatAnthropic(
@@ -156,6 +165,18 @@ def _extract_key_result(tool_name: str, data: dict) -> dict | None:
     return None
 
 
+def _get_tool_name(tool_msg: ToolMessage, messages: list) -> str:
+    """ToolMessage의 tool_call_id로 AIMessage에서 tool name을 역추적한다."""
+    for m in messages:
+        if isinstance(m, AIMessage):
+            for tc in (getattr(m, "tool_calls", None) or []):
+                tc_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", "")
+                tc_name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", "unknown")
+                if tc_id == tool_msg.tool_call_id:
+                    return tc_name
+    return "unknown"
+
+
 def _extract_tool_trace(messages: list) -> list[dict]:
     """
     accumulated_messages (원본, source_provenance 포함)에서 trace 추출.
@@ -259,13 +280,24 @@ def run_agent(
     print(f"{'='*50}")
 
     accumulated_messages: list = []
+    concept_gen_count = 0
+    MAX_CONCEPT_LOOP = 3
     try:
         for chunk in agent.stream(
             {"messages": [HumanMessage(content=input_context)]},
-            config={"recursion_limit": 15},
+            config={"recursion_limit": 25},
             stream_mode="values",
         ):
             accumulated_messages = chunk.get("messages", accumulated_messages)
+
+            concept_gen_count = sum(
+                1 for m in accumulated_messages
+                if isinstance(m, ToolMessage)
+                and _get_tool_name(m, accumulated_messages) == "concept_generator"
+            )
+            if concept_gen_count >= MAX_CONCEPT_LOOP:
+                print(f"[루프 탈출] concept_generator {concept_gen_count}회 호출 감지")
+                raise LoopLimitReached(concept_gen_count)
 
         messages = accumulated_messages
         final_message = messages[-1].content if messages else ""
@@ -312,6 +344,38 @@ def run_agent(
                 stop_reason="json_parse_error",
             )
             return result
+
+    except LoopLimitReached as e:
+        partial_trace = _extract_tool_trace(accumulated_messages) if accumulated_messages else []
+        concepts_so_far = []
+        for t in partial_trace:
+            if t["tool"] == "concept_generator" and t.get("key_result"):
+                name = t["key_result"].get("app_name")
+                desc = t["key_result"].get("description")
+                if name:
+                    concepts_so_far.append({"app_name": name, "description": desc})
+
+        result = {
+            "today_brief": {
+                "meme_trend": [], "it_trend": [],
+                "concepts": concepts_so_far,
+                "notice": f"동일 조합 {e.count}회 재시도로 루프 탈출",
+            },
+            "metadata": {
+                "used_tools": list(dict.fromkeys(t["tool"] for t in partial_trace)),
+                "loop_count": e.count,
+                "failure_type": "loop_overflow",
+                "fallback_action": f"동일 조합 {e.count}회 초과 — 차별화 포인트 제안으로 대체",
+                "tool_trace": partial_trace,
+            },
+        }
+        save_trace(
+            user_input=user_query, trend_focus=trend_focus,
+            difficulty_limit=difficulty_limit, exclude_existing=exclude_existing,
+            messages=accumulated_messages, final_result=result,
+            started_at=started_at, stop_reason="loop_overflow",
+        )
+        return result
 
     except Exception as e:
         error_str = str(e)

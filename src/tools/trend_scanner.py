@@ -78,8 +78,15 @@ def _fetch_github_trending(limit: int = 5) -> dict:
         }
 
 
-def _fetch_youtube(limit: int = 5) -> dict:
+def _fetch_youtube(limit: int = 5, force_fail: bool = False) -> dict:
     """YouTube Data API v3 mostPopular 실제 호출"""
+    if force_fail:
+        return {
+            "items": [],
+            "data_source": "fallback",
+            "endpoint": YOUTUBE_ENDPOINT,
+            "fallback_reason": "youtube_request_failed: forced_timeout_test",
+        }
     api_key = os.getenv("YOUTUBE_API_KEY")
     if not api_key:
         return {
@@ -169,7 +176,11 @@ def _fetch_reddit(limit: int = 5) -> dict:
 # ── LangChain Tool 정의 ────────────────────────────────────
 
 @tool
-def trend_scanner(trend_type: str = "both", limit: int = 5) -> dict[str, Any]:
+def trend_scanner(
+    trend_type: str = "both",
+    limit: int = 5,
+    force_youtube_fail: bool = False,
+) -> dict[str, Any]:
     """
     Reddit·YouTube·GitHub·HackerNews에서 오늘의 밈 및 IT 트렌드 키워드를 실시간 수집한다.
     YouTube API Key가 설정된 경우 실제 API를 호출하고, 미설정 시 Mock으로 fallback한다.
@@ -178,6 +189,7 @@ def trend_scanner(trend_type: str = "both", limit: int = 5) -> dict[str, Any]:
     Args:
         trend_type: 수집 유형. "meme" = 밈만, "IT" = IT 트렌드만, "both" = 둘 다 (기본값)
         limit: 소스당 수집할 키워드 수 (기본값 5)
+        force_youtube_fail: True이면 YouTube API 실패를 강제 시뮬레이션 (테스트용)
 
     Returns:
         ok: 성공 여부
@@ -204,7 +216,7 @@ def trend_scanner(trend_type: str = "both", limit: int = 5) -> dict[str, Any]:
     # 밈 트렌드 수집
     if trend_type in ("meme", "both"):
         reddit = _fetch_reddit(limit)
-        youtube = _fetch_youtube(limit)  # ← Mock → 실제 API
+        youtube = _fetch_youtube(limit, force_fail=force_youtube_fail)
         _record("reddit", reddit)
         _record("youtube", youtube)
 

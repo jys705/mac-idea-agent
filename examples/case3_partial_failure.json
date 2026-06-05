@@ -1,0 +1,60 @@
+{
+  "test_case": "case3_partial_failure",
+  "description": "YouTube API 강제 실패 시 Reddit만으로 밈 트렌드 수집 검증",
+  "input": {
+    "trend_type": "meme",
+    "limit": 3,
+    "force_youtube_fail": true
+  },
+  "result": {
+    "ok": true,
+    "data": {
+      "meme_trends": [
+        {
+          "keyword": "the future of work looks terrifying",
+          "source": "reddit",
+          "url": "https://redd.it/1tx92ub",
+          "score": 10
+        },
+        {
+          "keyword": "no one uses that.",
+          "source": "reddit",
+          "url": "https://redd.it/1twk01t",
+          "score": 15830
+        },
+        {
+          "keyword": "Soon they'll be saying their first words, too.",
+          "source": "reddit",
+          "url": "https://redd.it/1tw2v05",
+          "score": 3244
+        }
+      ],
+      "it_trends": [],
+      "partial_failure": [
+        "youtube"
+      ],
+      "source_provenance": {
+        "reddit": {
+          "data_source": "real_api",
+          "endpoint": "https://meme-api.com/gimme/memes",
+          "fallback_reason": null,
+          "items_returned": 3,
+          "fetched_at": "2026-06-05T13:53:36.607899+00:00"
+        },
+        "youtube": {
+          "data_source": "fallback",
+          "endpoint": "https://www.googleapis.com/youtube/v3/videos",
+          "fallback_reason": "youtube_request_failed: forced_timeout_test",
+          "items_returned": 0,
+          "fetched_at": "2026-06-05T13:53:36.607899+00:00"
+        }
+      }
+    },
+    "error": null
+  },
+  "assertions": {
+    "partial_failure_includes_youtube": true,
+    "meme_trends_from_reddit_only": true,
+    "reddit_items_count": 3
+  }
+}

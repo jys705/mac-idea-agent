@@ -1,0 +1,193 @@
+{
+  "today_brief": {
+    "meme_trend": [],
+    "it_trend": [],
+    "concepts": [
+      {
+        "app_name": "HalfBag",
+        "description": "키보드만으로 앱 실행 — 항상 절반만 쓰고 있다는 걸 알려주는 런처"
+      },
+      {
+        "app_name": "HalfStroke",
+        "description": "단축키를 반만 외워도 되는 키보드 전용 macOS 런처"
+      },
+      {
+        "app_name": "HalfKey",
+        "description": "키보드 단축키를 절반만 외워도 되게 도와주는 메뉴바 앱"
+      }
+    ],
+    "notice": "동일 조합 3회 재시도로 루프 탈출"
+  },
+  "metadata": {
+    "used_tools": [
+      "trend_scanner",
+      "concept_generator",
+      "app_existence_checker"
+    ],
+    "loop_count": 3,
+    "failure_type": "loop_overflow",
+    "fallback_action": "동일 조합 3회 초과 — 차별화 포인트 제안으로 대체",
+    "tool_trace": [
+      {
+        "step": 1,
+        "tool": "trend_scanner",
+        "ok": true,
+        "key_result": {
+          "top_meme_keywords": [
+            "All lubed up and no where to go",
+            "Works on humans",
+            "Literally bro"
+          ],
+          "top_it_keywords": [
+            "Mouseless – keyboard-driven control of macOS/Linux/Windows",
+            "Tracing a powerful GNSS interference source over Europe",
+            "Redis 8.8: New array data structure, rate limiter, performance improvements"
+          ],
+          "partial_failure": []
+        },
+        "source_provenance": {
+          "reddit": {
+            "data_source": "real_api",
+            "endpoint": "https://meme-api.com/gimme/memes",
+            "fallback_reason": null,
+            "items_returned": 5,
+            "fetched_at": "2026-06-05T13:53:48.391830+00:00"
+          },
+          "youtube": {
+            "data_source": "real_api",
+            "endpoint": "https://www.googleapis.com/youtube/v3/videos",
+            "fallback_reason": null,
+            "items_returned": 5,
+            "fetched_at": "2026-06-05T13:53:48.391830+00:00"
+          },
+          "hackernews": {
+            "data_source": "real_api",
+            "endpoint": "https://hacker-news.firebaseio.com/v0/topstories.json",
+            "fallback_reason": null,
+            "items_returned": 5,
+            "fetched_at": "2026-06-05T13:53:48.391830+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 5,
+            "fetched_at": "2026-06-05T13:53:48.391830+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 2,
+        "tool": "concept_generator",
+        "ok": true,
+        "key_result": {
+          "app_name": "HalfBag",
+          "description": "키보드만으로 앱 실행 — 항상 절반만 쓰고 있다는 걸 알려주는 런처",
+          "concept_basis": {
+            "meme": "Half the bag, It's always half the bag",
+            "it": "Mouseless – keyboard-driven control of macOS"
+          }
+        },
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-sonnet-4-6",
+          "temperature": 0.9
+        },
+        "error_code": null
+      },
+      {
+        "step": 3,
+        "tool": "app_existence_checker",
+        "ok": true,
+        "key_result": {
+          "similar_app_found": true,
+          "similar_app_names": [
+            "ForceTestApp"
+          ],
+          "next_action": "concept_generator 재호출 (루프백)"
+        },
+        "source_provenance": {
+          "appstore": {
+            "data_source": "mock",
+            "endpoint": null,
+            "fallback_reason": "force_similar_test",
+            "items_returned": 1
+          },
+          "github": {
+            "data_source": "mock",
+            "endpoint": null,
+            "fallback_reason": "force_similar_test",
+            "items_returned": 0
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 4,
+        "tool": "concept_generator",
+        "ok": true,
+        "key_result": {
+          "app_name": "HalfStroke",
+          "description": "단축키를 반만 외워도 되는 키보드 전용 macOS 런처",
+          "concept_basis": {
+            "meme": "Half the bag, It's always half the bag",
+            "it": "Mouseless – keyboard-driven control of macOS"
+          }
+        },
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-sonnet-4-6",
+          "temperature": 0.9
+        },
+        "error_code": null
+      },
+      {
+        "step": 5,
+        "tool": "app_existence_checker",
+        "ok": true,
+        "key_result": {
+          "similar_app_found": true,
+          "similar_app_names": [
+            "ForceTestApp"
+          ],
+          "next_action": "concept_generator 재호출 (루프백)"
+        },
+        "source_provenance": {
+          "appstore": {
+            "data_source": "mock",
+            "endpoint": null,
+            "fallback_reason": "force_similar_test",
+            "items_returned": 1
+          },
+          "github": {
+            "data_source": "mock",
+            "endpoint": null,
+            "fallback_reason": "force_similar_test",
+            "items_returned": 0
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 6,
+        "tool": "concept_generator",
+        "ok": true,
+        "key_result": {
+          "app_name": "HalfKey",
+          "description": "키보드 단축키를 절반만 외워도 되게 도와주는 메뉴바 앱",
+          "concept_basis": {
+            "meme": "Half the bag, It's always half the bag",
+            "it": "Mouseless – keyboard-driven control of macOS"
+          }
+        },
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-sonnet-4-6",
+          "temperature": 0.9
+        },
+        "error_code": null
+      }
+    ]
+  }
+}

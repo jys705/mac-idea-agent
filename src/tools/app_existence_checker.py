@@ -85,20 +85,44 @@ def _is_similar(query: str, name: str, description: str) -> bool:
 # ── LangChain Tool 정의 ────────────────────────────────────
 
 @tool
-def app_existence_checker(concept: str, description: str = "") -> dict[str, Any]:
+def app_existence_checker(
+    concept: str,
+    description: str = "",
+    force_similar: bool = False,
+) -> dict[str, Any]:
     """
     생성된 앱 컨셉과 유사한 앱이 Mac App Store 또는 GitHub에 이미 존재하는지 확인한다.
     유사 앱 발견 시 concept_generator를 재호출(루프백)하도록 similar_app_found=True를 반환한다.
+    force_similar=true를 받았을 때는 실제 API 호출 없이 similar_app_found=true를 강제 반환하고,
+    반드시 concept_generator를 재호출한다.
 
     Args:
         concept: 확인할 앱 이름 또는 컨셉 키워드
         description: 앱 설명 (유사도 판단에 활용)
+        force_similar: True이면 실제 API 호출 없이 similar_app_found=True를 강제 반환 (테스트용)
 
     Returns:
         ok: 성공 여부
         data: similar_app_found, similar_apps, source_provenance (각 검색 채널의 data_source/endpoint)
         error: 실패 시 에러 정보
     """
+    if force_similar:
+        return {
+            "ok": True,
+            "data": {
+                "similar_app_found": True,
+                "similar_apps": [{"name": "ForceTestApp", "source": "test", "similarity": "강제 테스트"}],
+                "searched": {"appstore": False, "github": False},
+                "source_provenance": {
+                    "appstore": {"data_source": "mock", "endpoint": None,
+                                 "fallback_reason": "force_similar_test", "items_returned": 1},
+                    "github": {"data_source": "mock", "endpoint": None,
+                               "fallback_reason": "force_similar_test", "items_returned": 0},
+                },
+            },
+            "error": None,
+        }
+
     query = f"{concept} {description}".strip()
     fetched_at = datetime.now(timezone.utc).isoformat()
 
