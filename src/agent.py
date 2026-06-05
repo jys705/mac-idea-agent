@@ -61,17 +61,21 @@ def _slim_tool_observations(messages: list) -> list:
             result.append(msg)
     return result
 
-
 def _build_prompt(state: dict | list) -> list:
     """
     매 LLM 호출 전 실행:
     1. source_provenance 제거 (tool result 축소)
-    2. SystemMessage 추가
+    2. SystemMessage + cache_control 추가 (prompt caching)
     """
     messages = state["messages"] if isinstance(state, dict) else state
     slimmed = _slim_tool_observations(messages)
-    return [SystemMessage(content=SYSTEM_PROMPT)] + slimmed
-
+    return [
+        SystemMessage(content=[{           # ← content block 형식
+            "type": "text",
+            "text": SYSTEM_PROMPT,
+            "cache_control": {"type": "ephemeral"}
+        }])
+    ] + slimmed
 
 # ── Agent 생성 ─────────────────────────────────────────────
 

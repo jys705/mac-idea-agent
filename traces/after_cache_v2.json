@@ -1,0 +1,247 @@
+{
+  "today_brief": {
+    "meme_trend": [],
+    "it_trend": [
+      "Redis 8.8: New array data structure, rate limiter, performance improvements",
+      "Tracing a powerful GNSS interference source over Europe",
+      "Changing How We Develop Ladybird",
+      "build-your-own-x (GitHub #1 트렌드)",
+      "public-apis (GitHub 트렌드)"
+    ],
+    "concepts": [
+      {
+        "app_name": "RateLimmy",
+        "description": "나만의 귀여운 레이트 리미터를 직접 만들어 API 과호출을 막아주는 메뉴바 앱",
+        "core_feature": "드래그앤드롭으로 레이트 리미터 규칙을 직접 조립 — 엔드포인트별 호출 횟수·시간 윈도우를 블록 쌓듯 설정하고, 초과 시 메뉴바 알림",
+        "similar_app_exists": false,
+        "difficulty": "2~3days",
+        "stack": [
+          "Swift",
+          "SwiftUI",
+          "Combine",
+          "UserDefaults"
+        ],
+        "vibe_coding_tip": "드래그앤드롭 UI는 SwiftUI의 onDrop modifier로 간단히 구현 가능합니다.",
+        "concept_basis": {
+          "it_trend": "Redis 8.8 rate limiter",
+          "github_trend": "build-your-own-x"
+        }
+      },
+      {
+        "app_name": "SignalLadybug",
+        "description": "유럽 GPS 전파 방해 현황을 메뉴바 무당벌레 아이콘 색으로 실시간 경보하는 앱",
+        "core_feature": "GNSS 교란 오픈 데이터 API를 주기적으로 폴링 → 교란 강도에 따라 메뉴바 아이콘을 초록/노랑/빨강으로 변환, 클릭 시 지역 상세 지도 팝오버 표시",
+        "similar_app_exists": false,
+        "difficulty": "2~3days",
+        "stack": [
+          "Swift",
+          "SwiftUI",
+          "AppKit",
+          "MenuBarExtra",
+          "URLSession",
+          "Timer"
+        ],
+        "vibe_coding_tip": "GNSS 교란 데이터 API 응답 파싱과 색상 상태 업데이트 로직을 먼저 검증하세요.",
+        "concept_basis": {
+          "it_trend": "GNSS interference tracing over Europe",
+          "github_trend": "Ladybird 브라우저 개발 방식 변화"
+        }
+      }
+    ]
+  },
+  "metadata": {
+    "used_tools": [
+      "trend_scanner",
+      "concept_generator",
+      "app_existence_checker",
+      "feasibility_checker"
+    ],
+    "loop_count": 0,
+    "failure_type": null,
+    "fallback_action": null,
+    "sources": {
+      "meme": [],
+      "it": [
+        "hackernews",
+        "github"
+      ]
+    },
+    "settings_applied": {
+      "trend_focus": "IT",
+      "difficulty_limit": null,
+      "exclude_existing": false
+    },
+    "partial_failure": [],
+    "tool_trace": [
+      {
+        "step": 1,
+        "tool": "trend_scanner",
+        "ok": true,
+        "key_result": {
+          "top_meme_keywords": [],
+          "top_it_keywords": [
+            "US tobacco firms applied tobacco strategies to globalize ultra-processed foods",
+            "Tracing a powerful GNSS interference source over Europe",
+            "Redis 8.8: New array data structure, rate limiter, performance improvements"
+          ],
+          "partial_failure": []
+        },
+        "source_provenance": {
+          "hackernews": {
+            "data_source": "real_api",
+            "endpoint": "https://hacker-news.firebaseio.com/v0/topstories.json",
+            "fallback_reason": null,
+            "items_returned": 5,
+            "fetched_at": "2026-06-05T12:26:25.784550+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 5,
+            "fetched_at": "2026-06-05T12:26:25.784550+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 2,
+        "tool": "concept_generator",
+        "ok": true,
+        "key_result": {
+          "app_name": "RateLimmy",
+          "description": "나만의 귀여운 레이트 리미터를 직접 만들어 API 과호출을 막아주는 메뉴바 앱",
+          "concept_basis": {
+            "meme": "build-your-own-x",
+            "it": "Redis 8.8 New array data structure rate limiter performance improvements"
+          }
+        },
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-sonnet-4-6",
+          "temperature": 0.9
+        },
+        "error_code": null
+      },
+      {
+        "step": 3,
+        "tool": "concept_generator",
+        "ok": true,
+        "key_result": {
+          "app_name": "SignalLadybug",
+          "description": "유럽 GPS 전파 방해 현황을 메뉴바에서 귀엽게 실시간 추적하는 앱",
+          "concept_basis": {
+            "meme": "Ladybird 브라우저 개발 방식 변화",
+            "it": "GNSS interference tracing over Europe"
+          }
+        },
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-sonnet-4-6",
+          "temperature": 0.9
+        },
+        "error_code": null
+      },
+      {
+        "step": 4,
+        "tool": "app_existence_checker",
+        "ok": true,
+        "key_result": {
+          "similar_app_found": false,
+          "similar_app_names": [],
+          "next_action": "feasibility_checker 진행"
+        },
+        "source_provenance": {
+          "appstore": {
+            "data_source": "real_api",
+            "endpoint": "https://itunes.apple.com/search",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-06-05T12:26:52.595503+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-06-05T12:26:52.595503+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 5,
+        "tool": "app_existence_checker",
+        "ok": true,
+        "key_result": {
+          "similar_app_found": false,
+          "similar_app_names": [],
+          "next_action": "feasibility_checker 진행"
+        },
+        "source_provenance": {
+          "appstore": {
+            "data_source": "real_api",
+            "endpoint": "https://itunes.apple.com/search",
+            "fallback_reason": null,
+            "items_returned": 2,
+            "fetched_at": "2026-06-05T12:26:52.597045+00:00"
+          },
+          "github": {
+            "data_source": "real_api",
+            "endpoint": "https://api.github.com/search/repositories",
+            "fallback_reason": null,
+            "items_returned": 0,
+            "fetched_at": "2026-06-05T12:26:52.597045+00:00"
+          }
+        },
+        "error_code": null
+      },
+      {
+        "step": 6,
+        "tool": "feasibility_checker",
+        "ok": true,
+        "key_result": {
+          "difficulty": "2~3days",
+          "stack": [
+            "Swift",
+            "SwiftUI",
+            "Combine",
+            "UserDefaults"
+          ],
+          "difficulty_limit_exceeded": false,
+          "vibe_coding_tip": "드래그앤드롭 UI는 SwiftUI의 onDrop modifier로 간단히 구현 가능합니다."
+        },
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-haiku-4-5-20251001",
+          "temperature": 0.3
+        },
+        "error_code": null
+      },
+      {
+        "step": 7,
+        "tool": "feasibility_checker",
+        "ok": true,
+        "key_result": {
+          "difficulty": "2~3days",
+          "stack": [
+            "Swift",
+            "SwiftUI",
+            "AppKit",
+            "MenuBarExtra",
+            "URLSession",
+            "Timer"
+          ],
+          "difficulty_limit_exceeded": false,
+          "vibe_coding_tip": "GNSS 교란 데이터 API 응답 파싱과 색상 상태 업데이트 로직을 먼저 검증하세요."
+        },
+        "source_provenance": {
+          "data_source": "llm_inference",
+          "model": "claude-haiku-4-5-20251001",
+          "temperature": 0.3
+        },
+        "error_code": null
+      }
+    ]
+  }
+}
