@@ -2,14 +2,18 @@ import os
 import json
 import re
 import time
-from typing import Any
+import uuid
+from typing import Any, Callable
 from dotenv import load_dotenv
 
 from langchain_anthropic import ChatAnthropic
 from langgraph.prebuilt import create_react_agent
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import Command
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
 
 from src.tools import tools
+from src.tools.app_existence_checker import map_human_decision
 from src.prompts.system_prompt import SYSTEM_PROMPT
 from src.observability import save_trace
 
@@ -88,11 +92,41 @@ def _build_prompt(state: dict | list) -> list:
 
 # ── Agent 생성 ─────────────────────────────────────────────
 
+# checkpointer: Human-in-the-loop interrupt(애매 구간 사용자 확인)에 필요.
+# interrupt → 일시정지 → Command(resume)로 재개하려면 thread 단위 상태 저장이 필수.
+_checkpointer = MemorySaver()
+
 agent = create_react_agent(
     model=_llm,
     tools=tools,
     prompt=_build_prompt,   # ← 9주차: callable로 교체
+    checkpointer=_checkpointer,
 )
+
+
+# ── Human-in-the-loop: 애매 구간 사용자 확인 (CLI) ──────────
+
+def _default_human_input(evidence: dict) -> str:
+    """interrupt 근거(evidence)를 CLI에 출력하고 사용자 입력을 받는다.
+
+    design_v2.md 섹션 5: 단순 "유사 앱 있음"이 아니라 근거(앱명·유사도·겹치는 점)를
+    함께 제시한다. 엔터/‘진행’ → 그대로 진행, ‘재탐색’/‘research’ → 루프백.
+    """
+    print("\n" + "=" * 50)
+    print("⚠️  유사한 앱이 있을 수 있습니다 — 사용자 확인이 필요합니다")
+    print(f"  의미 유사도 점수: {evidence.get('similarity_score')}")
+    for a in evidence.get("similar_apps", []):
+        print(f"   • {a.get('name')} ({a.get('source')}, 유사도 {a.get('similarity_score')})")
+        if a.get("overlap"):
+            print(f"     겹치는 점: {a.get('overlap')}")
+        if a.get("url"):
+            print(f"     {a.get('url')}")
+    print("  → [그대로 진행]: 엔터 또는 '진행'   |   [재탐색]: '재탐색' 입력")
+    print("=" * 50)
+    try:
+        return input("선택 > ").strip() or "proceed"
+    except EOFError:
+        return "proceed"
 
 
 # ── 가드레일 ──────────────────────────────────────────────
@@ -240,8 +274,11 @@ def run_agent(
     trend_focus: str = "both",
     difficulty_limit: str | None = None,
     exclude_existing: bool = False,
+    human_input_fn: Callable[[dict], str] | None = None,
 ) -> dict[str, Any]:
     started_at = time.time()
+    human_input_fn = human_input_fn or _default_human_input
+    human_decisions: list[dict] = []
 
     # 가드레일
     guard = check_guardrail(user_query)
@@ -282,12 +319,20 @@ def run_agent(
     accumulated_messages: list = []
     concept_gen_count = 0
     MAX_CONCEPT_LOOP = 3
-    try:
-        for chunk in agent.stream(
-            {"messages": [HumanMessage(content=input_context)]},
-            config={"recursion_limit": 25},
-            stream_mode="values",
-        ):
+    # checkpointer 사용 → thread 단위 상태 저장 (interrupt 재개에 필요)
+    config = {"recursion_limit": 25, "configurable": {"thread_id": uuid.uuid4().hex}}
+
+    def _drain_stream(payload) -> dict | None:
+        """스트림을 소진하며 메시지/루프카운트를 갱신한다.
+        애매 구간 interrupt가 발생하면 그 evidence(value)를 반환, 아니면 None."""
+        nonlocal accumulated_messages, concept_gen_count
+        pending = None
+        for chunk in agent.stream(payload, config=config, stream_mode="values"):
+            if isinstance(chunk, dict) and "__interrupt__" in chunk:
+                pending = chunk["__interrupt__"][0].value
+                if chunk.get("messages"):
+                    accumulated_messages = chunk["messages"]
+                continue
             accumulated_messages = chunk.get("messages", accumulated_messages)
 
             concept_gen_count = sum(
@@ -298,6 +343,24 @@ def run_agent(
             if concept_gen_count >= MAX_CONCEPT_LOOP:
                 print(f"[루프 탈출] concept_generator {concept_gen_count}회 호출 감지")
                 raise LoopLimitReached(concept_gen_count)
+        return pending
+
+    try:
+        payload: Any = {"messages": [HumanMessage(content=input_context)]}
+        while True:
+            pending = _drain_stream(payload)
+            if pending is None:
+                break
+            # ── Human-in-the-loop: 애매 구간 사용자 확인 ──
+            decision_raw = human_input_fn(pending)
+            looped_back = map_human_decision(decision_raw)
+            human_decisions.append({
+                "app_name": pending.get("concept"),
+                "similarity_score": pending.get("similarity_score"),
+                "decision": "research" if looped_back else "proceed",
+            })
+            print(f"[사용자 확인] {'재탐색(루프백)' if looped_back else '그대로 진행'} 선택")
+            payload = Command(resume=decision_raw)
 
         messages = accumulated_messages
         final_message = messages[-1].content if messages else ""
@@ -316,6 +379,7 @@ def run_agent(
             parsed = json.loads(json_str)
             parsed.setdefault("metadata", {})
             parsed["metadata"]["tool_trace"] = tool_trace
+            parsed["metadata"]["human_decisions"] = human_decisions
 
             save_trace(
                 user_input=user_query, trend_focus=trend_focus,
@@ -335,6 +399,7 @@ def run_agent(
                     "fallback_action": "raw_response",
                     "raw_response": final_message,
                     "tool_trace": tool_trace,
+                    "human_decisions": human_decisions,
                 },
             }
             save_trace(
@@ -367,6 +432,7 @@ def run_agent(
                 "failure_type": "loop_overflow",
                 "fallback_action": f"동일 조합 {e.count}회 초과 — 차별화 포인트 제안으로 대체",
                 "tool_trace": partial_trace,
+                "human_decisions": human_decisions,
             },
         }
         save_trace(
@@ -403,6 +469,7 @@ def run_agent(
                     "failure_type": "loop_overflow",
                     "fallback_action": "부분 결과 반환 — 루프 제한 도달. exclude_existing 해제 또는 difficulty_limit 완화 권장",
                     "tool_trace": partial_trace,
+                    "human_decisions": human_decisions,
                 },
             }
             save_trace(
@@ -422,6 +489,7 @@ def run_agent(
                     "fallback_action": None,
                     "error": error_str,
                     "tool_trace": partial_trace,
+                    "human_decisions": human_decisions,
                 },
             }
             save_trace(

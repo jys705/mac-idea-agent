@@ -61,6 +61,26 @@ def main():
         print("="*50)
         print(output)
 
+    # 생성된 개발 킥오프 산출물(SPEC.md / BRIEF.md) 경로 안내
+    brief = result.get("today_brief") or {}
+    concepts = brief.get("concepts") or []
+    kickoff_lines = []
+    for c in concepts:
+        kickoff = c.get("kickoff") or {}
+        spec = kickoff.get("spec_path")
+        brief_path = kickoff.get("brief_path")
+        if spec or brief_path:
+            kickoff_lines.append(f"  • {c.get('app_name', '?')}")
+            if spec:
+                kickoff_lines.append(f"      개발용  SPEC : {spec}")
+            if brief_path:
+                kickoff_lines.append(f"      사람용  BRIEF: {brief_path}")
+    if kickoff_lines:
+        print("\n" + "="*50)
+        print("🚀 바로 개발 시작하기 — 생성된 킥오프 문서")
+        print("="*50)
+        print("\n".join(kickoff_lines))
+
 
 if __name__ == "__main__":
     main()

@@ -226,3 +226,6 @@ kiro/
 CLAUDE.md
 README2.md
 design_v2.md
+
+# 킥오프 산출물 (feasibility_checker가 생성하는 SPEC.md/BRIEF.md) — 로컬 생성물
+output/

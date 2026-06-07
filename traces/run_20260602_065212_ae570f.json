@@ -1,0 +1,404 @@
+{
+  "trace_id": "run_20260602_065212_ae570f",
+  "started_at": "2026-06-02T06:51:20.741413+00:00",
+  "total_latency_ms": 51395,
+  "request": {
+    "user_input": "오늘 밈 트렌드 기반으로 만들어줘",
+    "trend_focus": "meme",
+    "difficulty_limit": null,
+    "exclude_existing": false
+  },
+  "prompt_version": "system_prompt_v2",
+  "model": {
+    "agent": "claude-sonnet-4-6",
+    "concept_generator": "claude-sonnet-4-6 (temperature=0.9)",
+    "feasibility_checker": "claude-haiku-4-5-20251001 (temperature=0.3)"
+  },
+  "steps": [
+    {
+      "step": 1,
+      "tool": "trend_scanner",
+      "arguments": {
+        "trend_type": "meme",
+        "limit": 5
+      },
+      "result": "success",
+      "ok": true,
+      "error_code": null,
+      "latency_ms": null,
+      "input_tokens": 3474,
+      "output_tokens": 74
+    },
+    {
+      "step": 2,
+      "tool": "concept_generator",
+      "arguments": {
+        "meme_trend": "카피바라 밈",
+        "it_trend": "macOS 생산성 앱"
+      },
+      "result": "success",
+      "ok": true,
+      "error_code": null,
+      "latency_ms": null,
+      "input_tokens": 4214,
+      "output_tokens": 265
+    },
+    {
+      "step": 3,
+      "tool": "concept_generator",
+      "arguments": {
+        "meme_trend": "Italian Brainrot 밈",
+        "it_trend": "macOS 생산성 앱"
+      },
+      "result": "success",
+      "ok": true,
+      "error_code": null,
+      "latency_ms": null,
+      "input_tokens": 4214,
+      "output_tokens": 265
+    },
+    {
+      "step": 4,
+      "tool": "app_existence_checker",
+      "arguments": {
+        "concept": "CapyFocus",
+        "description": "카피바라처럼 여유롭게, 포모도로 타이머가 메뉴바에서 당신을 지켜봅니다"
+      },
+      "result": "success",
+      "ok": true,
+      "error_code": null,
+      "latency_ms": null,
+      "input_tokens": 4923,
+      "output_tokens": 265
+    },
+    {
+      "step": 5,
+      "tool": "app_existence_checker",
+      "arguments": {
+        "concept": "Bombardino Focus",
+        "description": "이탈리안 브레인롯 캐릭터가 집중 시간을 지켜주는 뽀모도로 메뉴바 앱"
+      },
+      "result": "success",
+      "ok": true,
+      "error_code": null,
+      "latency_ms": null,
+      "input_tokens": 4923,
+      "output_tokens": 265
+    },
+    {
+      "step": 6,
+      "tool": "feasibility_checker",
+      "arguments": {
+        "concept": "CapyFocus",
+        "core_feature": "집중 중 방해 시 카피바라가 실망한 표정으로 알림",
+        "difficulty_limit": null
+      },
+      "result": "success",
+      "ok": true,
+      "error_code": null,
+      "latency_ms": null,
+      "input_tokens": 5643,
+      "output_tokens": 280
+    },
+    {
+      "step": 7,
+      "tool": "feasibility_checker",
+      "arguments": {
+        "concept": "Bombardino Focus",
+        "core_feature": "집중 중 딴짓 감지 시 Tralalero가 경고 알림 발사",
+        "difficulty_limit": null
+      },
+      "result": "success",
+      "ok": true,
+      "error_code": null,
+      "latency_ms": null,
+      "input_tokens": 5643,
+      "output_tokens": 280
+    }
+  ],
+  "step_count": 7,
+  "stop_reason": "final_answer",
+  "guardrail_blocked": false,
+  "final_answer": {
+    "today_brief": {
+      "meme_trend": [
+        "카피바라 밈",
+        "Italian Brainrot 밈",
+        "게 사이드워크 밈",
+        "ishowspeed",
+        "Hardcore Minecraft"
+      ],
+      "it_trend": [],
+      "concepts": [
+        {
+          "app_name": "CapyFocus",
+          "description": "카피바라처럼 여유롭게, 포모도로 타이머가 메뉴바에서 당신을 지켜봅니다",
+          "core_feature": "집중 중 방해 시 카피바라가 실망한 표정으로 알림",
+          "similar_app_exists": false,
+          "difficulty": "2~3days",
+          "stack": [
+            "Swift",
+            "SwiftUI",
+            "AppKit",
+            "MenuBarExtra",
+            "ScreenTime API",
+            "UserNotifications"
+          ],
+          "vibe_coding_tip": "ScreenTime 권한 획득과 카피바라 애니메이션 타이밍이 핵심입니다."
+        },
+        {
+          "app_name": "Bombardino Focus",
+          "description": "이탈리안 브레인롯 캐릭터가 집중 시간을 지켜주는 뽀모도로 메뉴바 앱",
+          "core_feature": "집중 중 딴짓 감지 시 Tralalero가 경고 알림 발사",
+          "similar_app_exists": false,
+          "difficulty": "2~3days",
+          "stack": [
+            "Swift",
+            "SwiftUI",
+            "AppKit",
+            "AVFoundation",
+            "ScreenCaptureKit",
+            "Vision Framework"
+          ],
+          "vibe_coding_tip": "화면 캡처와 ML 기반 딴짓 감지 로직을 분리하고, 알림은 간단한 NSSound로 구현하세요."
+        }
+      ]
+    },
+    "metadata": {
+      "used_tools": [
+        "trend_scanner",
+        "concept_generator",
+        "app_existence_checker",
+        "feasibility_checker"
+      ],
+      "loop_count": 0,
+      "failure_type": null,
+      "fallback_action": null,
+      "sources": {
+        "meme": [
+          {
+            "keyword": "카피바라 밈",
+            "source": "reddit_mock",
+            "score": 94200
+          },
+          {
+            "keyword": "게 사이드워크 밈",
+            "source": "reddit_mock",
+            "score": 67400
+          },
+          {
+            "keyword": "Italian Brainrot 밈",
+            "source": "reddit_mock",
+            "score": 52100
+          },
+          {
+            "keyword": "ishowspeed",
+            "source": "youtube",
+            "views": 3308483
+          },
+          {
+            "keyword": "Hardcore Minecraft",
+            "source": "youtube",
+            "views": 768035
+          }
+        ],
+        "it": []
+      },
+      "tool_trace": [
+        {
+          "step": 1,
+          "tool": "trend_scanner",
+          "ok": true,
+          "key_result": {
+            "top_meme_keywords": [
+              "카피바라 밈",
+              "게 사이드워크 밈",
+              "Italian Brainrot 밈"
+            ],
+            "top_it_keywords": [],
+            "partial_failure": []
+          },
+          "source_provenance": {
+            "reddit": {
+              "data_source": "mock",
+              "endpoint": null,
+              "fallback_reason": "reddit_oauth_not_configured",
+              "items_returned": 3,
+              "fetched_at": "2026-06-02T06:51:25.206650+00:00"
+            },
+            "youtube": {
+              "data_source": "real_api",
+              "endpoint": "https://www.googleapis.com/youtube/v3/videos",
+              "fallback_reason": null,
+              "items_returned": 5,
+              "fetched_at": "2026-06-02T06:51:25.206650+00:00"
+            }
+          },
+          "error_code": null
+        },
+        {
+          "step": 2,
+          "tool": "concept_generator",
+          "ok": true,
+          "key_result": {
+            "app_name": "CapyFocus",
+            "description": "카피바라처럼 여유롭게, 포모도로 타이머가 메뉴바에서 당신을 지켜봅니다",
+            "concept_basis": {
+              "meme": "카피바라 밈",
+              "it": "macOS 생산성 앱"
+            }
+          },
+          "source_provenance": {
+            "data_source": "llm_inference",
+            "model": "claude-sonnet-4-6",
+            "temperature": 0.9
+          },
+          "error_code": null
+        },
+        {
+          "step": 3,
+          "tool": "concept_generator",
+          "ok": true,
+          "key_result": {
+            "app_name": "Bombardino Focus",
+            "description": "이탈리안 브레인롯 캐릭터가 집중 시간을 지켜주는 뽀모도로 메뉴바 앱",
+            "concept_basis": {
+              "meme": "Italian Brainrot 밈",
+              "it": "macOS 생산성 앱"
+            }
+          },
+          "source_provenance": {
+            "data_source": "llm_inference",
+            "model": "claude-sonnet-4-6",
+            "temperature": 0.9
+          },
+          "error_code": null
+        },
+        {
+          "step": 4,
+          "tool": "app_existence_checker",
+          "ok": true,
+          "key_result": {
+            "similar_app_found": false,
+            "similar_app_names": [],
+            "next_action": "feasibility_checker 진행"
+          },
+          "source_provenance": {
+            "appstore": {
+              "data_source": "real_api",
+              "endpoint": "https://itunes.apple.com/search",
+              "fallback_reason": null,
+              "items_returned": 0,
+              "fetched_at": "2026-06-02T06:51:43.190809+00:00"
+            },
+            "github": {
+              "data_source": "real_api",
+              "endpoint": "https://api.github.com/search/repositories",
+              "fallback_reason": null,
+              "items_returned": 0,
+              "fetched_at": "2026-06-02T06:51:43.190809+00:00"
+            }
+          },
+          "error_code": null
+        },
+        {
+          "step": 5,
+          "tool": "app_existence_checker",
+          "ok": true,
+          "key_result": {
+            "similar_app_found": false,
+            "similar_app_names": [],
+            "next_action": "feasibility_checker 진행"
+          },
+          "source_provenance": {
+            "appstore": {
+              "data_source": "real_api",
+              "endpoint": "https://itunes.apple.com/search",
+              "fallback_reason": null,
+              "items_returned": 0,
+              "fetched_at": "2026-06-02T06:51:43.192733+00:00"
+            },
+            "github": {
+              "data_source": "real_api",
+              "endpoint": "https://api.github.com/search/repositories",
+              "fallback_reason": null,
+              "items_returned": 0,
+              "fetched_at": "2026-06-02T06:51:43.192733+00:00"
+            }
+          },
+          "error_code": null
+        },
+        {
+          "step": 6,
+          "tool": "feasibility_checker",
+          "ok": true,
+          "key_result": {
+            "difficulty": "2~3days",
+            "stack": [
+              "Swift",
+              "SwiftUI",
+              "AppKit",
+              "MenuBarExtra",
+              "ScreenTime API",
+              "UserNotifications"
+            ],
+            "difficulty_limit_exceeded": false,
+            "vibe_coding_tip": "ScreenTime 권한 획득과 카피바라 애니메이션 타이밍이 핵심입니다."
+          },
+          "source_provenance": {
+            "data_source": "llm_inference",
+            "model": "claude-haiku-4-5-20251001",
+            "temperature": 0.3
+          },
+          "error_code": null
+        },
+        {
+          "step": 7,
+          "tool": "feasibility_checker",
+          "ok": true,
+          "key_result": {
+            "difficulty": "2~3days",
+            "stack": [
+              "Swift",
+              "SwiftUI",
+              "AppKit",
+              "AVFoundation",
+              "ScreenCaptureKit",
+              "Vision Framework"
+            ],
+            "difficulty_limit_exceeded": false,
+            "vibe_coding_tip": "화면 캡처와 ML 기반 딴짓 감지 로직을 분리하고, 알림은 간단한 NSSound로 구현하세요."
+          },
+          "source_provenance": {
+            "data_source": "llm_inference",
+            "model": "claude-haiku-4-5-20251001",
+            "temperature": 0.3
+          },
+          "error_code": null
+        }
+      ]
+    }
+  },
+  "metrics": {
+    "input_tokens": 24553,
+    "output_tokens": 2077,
+    "total_tokens": 26630,
+    "estimated_cost_usd": 0.104814,
+    "total_latency_ms": 51395,
+    "tool_error_count": 0
+  },
+  "privacy": {
+    "masked_fields": [
+      "password",
+      "api_key",
+      "secret",
+      "authorization",
+      "token"
+    ],
+    "excluded_fields": [
+      "ANTHROPIC_API_KEY",
+      "LANGCHAIN_API_KEY",
+      "env_vars"
+    ]
+  }
+}
