@@ -180,20 +180,29 @@ def _extract_key_result(tool_name: str, data: dict) -> dict | None:
         return {
             "app_name": data.get("app_name"),
             "description": data.get("description"),
+            "core_feature": data.get("core_feature"),
+            "app_form": data.get("app_form"),
             "concept_basis": data.get("concept_basis"),
+            "scope_check": data.get("scope_check"),
         }
     if tool_name == "app_existence_checker":
         similar = data.get("similar_apps", [])
         return {
             "similar_app_found": data.get("similar_app_found"),
             "similar_app_names": [a.get("name") for a in similar if a.get("name")],
+            "similarity_score": data.get("similarity_score"),
+            "decision_band": data.get("decision_band"),
             "next_action": "concept_generator 재호출 (루프백)" if data.get("similar_app_found") else "feasibility_checker 진행",
         }
     if tool_name == "feasibility_checker":
         return {
+            "app_name": data.get("app_name"),
             "difficulty": data.get("difficulty"),
             "stack": data.get("stack"),
+            "differentiation": data.get("differentiation"),
             "difficulty_limit_exceeded": data.get("difficulty_limit_exceeded"),
+            "spec_path": data.get("spec_path"),
+            "brief_path": data.get("brief_path"),
             "vibe_coding_tip": data.get("vibe_coding_tip"),
         }
     return None
@@ -265,6 +274,105 @@ def _extract_tool_trace(messages: list) -> list[dict]:
             "error_code": (err or {}).get("code") if isinstance(err, dict) else None,
         })
     return trace
+
+
+# ── 최종 브리핑 코드 조립 (LLM 비거치) ──────────────────────
+# tool_trace의 key_result만으로 today_brief를 결정적으로 조립한다.
+# LLM이 JSON을 생성/파싱하던 단계를 제거 → 출력 스키마 안정화 + 호출 1회 절감.
+
+def _collect_sources(trace: list[dict]) -> dict:
+    """trend_scanner provenance에서 출처 URL/소스를 모은다."""
+    meme_src, it_src = [], []
+    for t in trace:
+        if t["tool"] != "trend_scanner":
+            continue
+        prov = t.get("source_provenance") or {}
+        for name in ("reddit", "youtube"):
+            ep = (prov.get(name) or {}).get("endpoint")
+            if ep:
+                meme_src.append(ep)
+        for name in ("hackernews", "github"):
+            ep = (prov.get(name) or {}).get("endpoint")
+            if ep:
+                it_src.append(ep)
+    return {"meme": meme_src, "it": it_src}
+
+
+def assemble_today_brief(trace: list[dict]) -> dict:
+    """tool_trace로부터 today_brief를 코드로 조립한다 (LLM 미사용).
+
+    - trend_scanner: 최신 호출의 meme/it 키워드를 트렌드로
+    - concept_generator: 생성된 각 컨셉 (app_name 기준)
+    - app_existence_checker: 컨셉의 유사앱 여부/점수 (순서로 매칭)
+    - feasibility_checker: 난이도/스택/차별점/킥오프 경로 (app_name으로 매칭)
+    """
+    meme_trend, it_trend = [], []
+    for t in trace:
+        if t["tool"] == "trend_scanner" and t.get("key_result"):
+            kr = t["key_result"]
+            if kr.get("top_meme_keywords"):
+                meme_trend = kr["top_meme_keywords"]
+            if kr.get("top_it_keywords"):
+                it_trend = kr["top_it_keywords"]
+
+    # concept_generator 결과를 순서대로 수집 (app_name 기준 최종본만 유지)
+    concepts: list[dict] = []
+    concept_index: dict[str, int] = {}
+    for t in trace:
+        kr = t.get("key_result") or {}
+        if t["tool"] == "concept_generator" and kr.get("app_name"):
+            name = kr["app_name"]
+            entry = {
+                "app_name": name,
+                "description": kr.get("description"),
+                "core_feature": kr.get("core_feature"),
+                "app_form": kr.get("app_form"),
+                "similar_app_exists": False,
+                "similarity_score": None,
+                "difficulty": None,
+                "stack": [],
+                "differentiation": None,
+                "kickoff": {},
+            }
+            if name in concept_index:
+                concepts[concept_index[name]] = entry
+            else:
+                concept_index[name] = len(concepts)
+                concepts.append(entry)
+
+    # app_existence_checker 결과를 컨셉에 순서대로 매핑
+    checker_results = [t["key_result"] for t in trace
+                       if t["tool"] == "app_existence_checker" and t.get("key_result")]
+    for i, chk in enumerate(checker_results):
+        if i < len(concepts):
+            concepts[i]["similar_app_exists"] = bool(chk.get("similar_app_found"))
+            concepts[i]["similarity_score"] = chk.get("similarity_score")
+
+    # feasibility_checker 결과를 app_name으로 매핑
+    for t in trace:
+        if t["tool"] != "feasibility_checker":
+            continue
+        kr = t.get("key_result") or {}
+        name = kr.get("app_name")
+        idx = concept_index.get(name)
+        if idx is None and concepts:
+            idx = len(concepts) - 1  # app_name 누락 시 마지막 컨셉에 귀속
+        if idx is not None:
+            concepts[idx]["difficulty"] = kr.get("difficulty")
+            concepts[idx]["stack"] = kr.get("stack", [])
+            concepts[idx]["differentiation"] = kr.get("differentiation")
+            if kr.get("spec_path") or kr.get("brief_path"):
+                concepts[idx]["kickoff"] = {
+                    "spec_path": kr.get("spec_path"),
+                    "brief_path": kr.get("brief_path"),
+                }
+
+    return {
+        "meme_trend": meme_trend,
+        "it_trend": it_trend,
+        "concepts": concepts,
+        "sources": _collect_sources(trace),
+    }
 
 
 # ── 실행 함수 ──────────────────────────────────────────────
@@ -363,52 +471,34 @@ def run_agent(
             payload = Command(resume=decision_raw)
 
         messages = accumulated_messages
-        final_message = messages[-1].content if messages else ""
         tool_trace = _extract_tool_trace(messages)
 
         print(f"\n[Agent 완료] 총 메시지 수: {len(messages)} / Tool 호출 수: {len(tool_trace)}")
 
-        try:
-            if "```json" in final_message:
-                json_str = final_message.split("```json")[1].split("```")[0].strip()
-            elif "```" in final_message:
-                json_str = final_message.split("```")[1].split("```")[0].strip()
-            else:
-                json_str = final_message.strip()
+        # ── 최종 브리핑을 코드로 조립 (LLM JSON 생성/파싱 제거) ──
+        today_brief = assemble_today_brief(tool_trace)
+        used_tools = list(dict.fromkeys(t["tool"] for t in tool_trace))
+        loop_count = max(0, sum(1 for t in tool_trace if t["tool"] == "concept_generator") - 1)
 
-            parsed = json.loads(json_str)
-            parsed.setdefault("metadata", {})
-            parsed["metadata"]["tool_trace"] = tool_trace
-            parsed["metadata"]["human_decisions"] = human_decisions
-
-            save_trace(
-                user_input=user_query, trend_focus=trend_focus,
-                difficulty_limit=difficulty_limit, exclude_existing=exclude_existing,
-                messages=messages, final_result=parsed, started_at=started_at,
-                stop_reason="final_answer",
-            )
-            return parsed
-
-        except json.JSONDecodeError:
-            result = {
-                "today_brief": None,
-                "metadata": {
-                    "used_tools": [t["tool"] for t in tool_trace],
-                    "loop_count": 0,
-                    "failure_type": "json_parse_error",
-                    "fallback_action": "raw_response",
-                    "raw_response": final_message,
-                    "tool_trace": tool_trace,
-                    "human_decisions": human_decisions,
-                },
-            }
-            save_trace(
-                user_input=user_query, trend_focus=trend_focus,
-                difficulty_limit=difficulty_limit, exclude_existing=exclude_existing,
-                messages=messages, final_result=result, started_at=started_at,
-                stop_reason="json_parse_error",
-            )
-            return result
+        result = {
+            "today_brief": today_brief,
+            "metadata": {
+                "used_tools": used_tools,
+                "loop_count": loop_count,
+                "failure_type": None,
+                "fallback_action": None,
+                "sources": today_brief.get("sources", {}),
+                "tool_trace": tool_trace,
+                "human_decisions": human_decisions,
+            },
+        }
+        save_trace(
+            user_input=user_query, trend_focus=trend_focus,
+            difficulty_limit=difficulty_limit, exclude_existing=exclude_existing,
+            messages=messages, final_result=result, started_at=started_at,
+            stop_reason="final_answer",
+        )
+        return result
 
     except LoopLimitReached as e:
         partial_trace = _extract_tool_trace(accumulated_messages) if accumulated_messages else []

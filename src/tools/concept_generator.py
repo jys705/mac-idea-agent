@@ -78,7 +78,9 @@ def validate_scope(
 def concept_generator(
     meme_trend: str,
     it_trend: str,
-    exclude_concepts: list[str] | None = None
+    exclude_concepts: list[str] | None = None,
+    similar_apps: list[dict] | None = None,
+    retry_strategy: str = "fresh",
 ) -> dict[str, Any]:
     """
     수집된 밈 트렌드와 IT 트렌드를 교차 조합하여 macOS 앱 컨셉 후보를 생성한다.
@@ -90,13 +92,22 @@ def concept_generator(
     - 다음은 절대 생성하지 않는다: 플랫폼, 노코드/비주얼 빌더, 봇 프레임워크,
       단계별로 직접 만들며 배우는 학습앱. (복잡한 조립/자동화 플랫폼 금지)
 
-    app_existence_checker에서 유사 앱이 발견된 경우 exclude_concepts에 해당 앱명을 넣어 재호출한다.
-    동일 조합으로 3회 이상 재호출 시 호출을 중단해야 한다.
+    재생성(루프백) 정책 — 단계적 전략 (retry_strategy):
+    - "fresh"   : 최초 생성. 주어진 트렌드 조합으로 새 컨셉.
+    - "twist"   : 1차 유사 앱 발견 후. **트렌드 조합(meme×it)은 유지**하고 similar_apps와
+                  핵심 가치가 겹치지 않게 기능 각도를 비틀어 차별화한다. (트렌드 폐기 X)
+    - "pivot"   : 비틀어도 계속 유사 앱이 나올 때. 같은 조합을 고집하지 말고 **트렌드 조합
+                  자체를 바꿔** 완전히 새로운 컨셉을 생성한다. (agent가 다른 meme/it 키워드를 넘긴다)
+    - exclude_concepts에는 이미 만든 내 컨셉명을 넣어 같은 안의 반복을 막는다.
+    - 동일 조합으로 3회 이상 막히면 호출을 중단한다(루프 탈출).
 
     Args:
         meme_trend: 밈 트렌드 키워드 (예: "카피바라 밈")
         it_trend: IT 트렌드 키워드 (예: "MCP 핫함")
-        exclude_concepts: 이미 유사 앱이 존재해서 제외할 컨셉명 목록
+        exclude_concepts: 이번 세션에서 이미 만든 내 컨셉명 목록 (같은 안 반복 방지)
+        similar_apps: app_existence_checker가 찾은 유사 앱 목록(name/description). 이들과
+                      가치가 겹치지 않게 차별화하는 근거로 쓴다. (배제가 아니라 차별화)
+        retry_strategy: "fresh"(최초) / "twist"(조합 유지+비틀기) / "pivot"(조합 교체+완전 새 컨셉)
 
     Returns:
         ok: 성공 여부
@@ -105,14 +116,45 @@ def concept_generator(
     """
     exclude_str = ""
     if exclude_concepts:
-        exclude_str = f"\n다음 컨셉은 이미 유사한 앱이 존재하므로 절대 사용하지 마세요: {', '.join(exclude_concepts)}"
+        exclude_str = (
+            f"\n[이미 시도한 내 컨셉 — 같은 안을 반복하지 말 것]: {', '.join(exclude_concepts)}"
+        )
+
+    similar_str = ""
+    if similar_apps:
+        lines = []
+        for a in similar_apps[:5]:
+            name = a.get("name", "")
+            desc = a.get("description", "")
+            lines.append(f"  · {name}: {desc}")
+        similar_str = (
+            "\n[이미 존재하는 유사 앱]\n" + "\n".join(lines)
+        )
+
+    # 재시도 전략별 지시 (단계적: 비틀기 → 안 되면 조합 교체)
+    if retry_strategy == "twist":
+        strategy_str = (
+            "\n[재생성 전략: TWIST] 위 트렌드 조합(밈×IT)은 그대로 유지하라. 다만 위 유사 앱들과 "
+            "'핵심 가치'가 겹치지 않도록 기능의 각도를 비틀거나 새로운 쓸모를 더해 차별화하라. "
+            "트렌드를 폐기하지 말 것. 단, 억지로 비틀어 어색해지면 안 된다 — 자연스러운 차별화가 "
+            "어렵다고 판단되면 차라리 솔직히 약한 컨셉임을 description에 드러내라."
+        )
+    elif retry_strategy == "pivot":
+        strategy_str = (
+            "\n[재생성 전략: PIVOT] 같은 트렌드 조합을 비틀어도 계속 기존 앱과 겹쳤다. 이제 "
+            "현재 조합을 고집하지 말고 **완전히 새로운 컨셉**을 만들어라. 위에 주어진 meme/it가 "
+            "이미 포화 상태라면, 그 트렌드의 다른 측면을 쓰거나 더 참신한 각도로 접근하라. "
+            "'억지로 트는 것'보다 '새로 잘 만든 것'이 낫다."
+        )
+    else:  # fresh
+        strategy_str = ""
 
     prompt = f"""당신은 창의적인 macOS 앱 아이디어를 생성하는 전문가입니다.
 아래 두 트렌드를 교차 조합하여 "귀엽고 하찮지만 실용적인" macOS 앱 컨셉을 하나 생성하세요.
 
 밈 트렌드: {meme_trend}
 IT 트렌드: {it_trend}
-{exclude_str}
+{exclude_str}{similar_str}{strategy_str}
 
 스코프 (반드시 지킬 것):
 - 반드시 "단일 기능 macOS 유틸리티"여야 합니다. 형태는 메뉴바 앱 / Dock 앱 / 단축키 유틸 / 위젯 중 하나.
