@@ -10,6 +10,27 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+# ── 킥오프 프롬프트 고정 템플릿 ─────────────────────────────
+# 모든 SPEC.md가 동일한 검증된 킥오프 프롬프트를 쓰도록 고정한다.
+# (LLM이 매번 생성하면 문구가 들쭉날쭉해지므로 상수로 통일)
+# {app_name} / {app_form} 만 치환된다.
+KICKOFF_PROMPT_TEMPLATE = """이 폴더의 SPEC.md와 BRIEF.md를 먼저 읽어라.
+
+- SPEC.md의 [고정] 섹션(제품 정의·차별화 포인트·MVP 범위·완료 기준)은
+  mac-idea-agent가 트렌드 분석과 유사 앱 검사로 도출한 맥락이다. 그대로 존중하라.
+- [초안] 섹션(스택·파일 구조·구현 순서)은 출발점일 뿐이다. 더 나은 안이 있으면
+  plan 모드로 제시하고 나와 조율한 뒤 확정하라. '{app_name}'은 단일 기능 macOS
+  유틸리티({app_form})이며 MVP 범위를 벗어나지 마라.
+- BRIEF.md의 제품 의도·사용자 가치·수익 방향을 구현 내내 유지하라.
+
+먼저 plan 모드로 전체 구현 계획을 제시하고 내 승인을 받아라. 바로 코드 짜지 마라.
+승인 후 실행 단계에서:
+1) 조율로 바뀐 결정을 SPEC.md의 해당 섹션에 직접 반영하라 (살아있는 문서로 유지).
+2) 이 폴더에 CLAUDE.md가 없으면 확정된 핵심 결정을 요약한 CLAUDE.md를 생성해
+   이후 세션에서도 맥락이 유지되게 하라.
+3) .dmg 배포 시 코드 서명·notarization 필요 여부를 완료 기준에 맞춰 처리하라."""
+
 # ── LLM 초기화 ─────────────────────────────────────────────
 
 _llm = ChatAnthropic(
@@ -68,14 +89,8 @@ def render_spec_md(plan: dict) -> str:
             "— 미적용 시 Gatekeeper '확인되지 않은 개발자' 경고 (Apple Developer Program 연 $99)"
         )
 
-    kickoff_prompt = plan.get("kickoff_prompt") or (
-        f"이 폴더의 SPEC.md를 기준 문서로 읽고 '{app_name}'을(를) 개발해줘. "
-        f"단일 기능 macOS 유틸리티({app_form})이며 [고정] 섹션(제품정의·차별점·MVP·완료기준)은 "
-        f"그대로 존중하고, [초안] 섹션(스택·파일구조·구현순서)은 plan 모드로 더 나은 안을 제시해 "
-        f"나와 조율한 뒤 확정해줘. 조율로 바뀐 결정은 SPEC.md 해당 섹션을 직접 갱신하고, "
-        f"이 폴더에 CLAUDE.md가 없으면 확정된 핵심 결정을 요약한 CLAUDE.md를 만들어 줘. "
-        f"먼저 plan 모드로 구현 순서를 제시하고 내 승인을 받은 뒤 진행해줘."
-    )
+    # 킥오프 프롬프트는 고정 템플릿으로 통일한다 (LLM 변동성 제거).
+    kickoff_prompt = KICKOFF_PROMPT_TEMPLATE.format(app_name=app_name, app_form=app_form)
 
     return f"""# {app_name} — 개발 SPEC (외부 AI 개발용)
 
@@ -226,7 +241,6 @@ IT 트렌드 근거: {it_trend}{similar_block}
   "implementation_order": ["1. ...", "2. ...", "3. ..."],
   "tricky_points": ["구현 시 까다로운 지점/함정 (기존 난이도 정보를 여기로 전환)"],
   "completion_criteria": ["어디까지 되면 끝인지", ".app/.dmg 배포·서명·공증 여부"],
-  "kickoff_prompt": "외부 AI에 그대로 붙여넣어 시작할 복붙용 프롬프트 한 덩어리",
   "brief": {{
     "why_trivial_useful": "왜 하찮지만 실용적인지 (한국어)",
     "positioning": "사용자에게 어떻게 비춰지는지",

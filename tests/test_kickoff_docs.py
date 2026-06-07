@@ -57,9 +57,10 @@ def test_spec_has_required_sections(sample_plan):
     assert "polling 주기" in spec
     # 단일 기능 macOS 유틸리티 명시
     assert "단일 기능 macOS 유틸리티" in spec
-    # 킥오프 프롬프트 복붙용
+    # 킥오프 프롬프트 복붙용 (고정 템플릿)
     assert "킥오프 프롬프트" in spec
-    assert "plan 모드로 개발" in spec
+    assert "plan 모드로 전체 구현 계획" in spec
+    assert "CLAUDE.md" in spec
 
 
 def test_spec_completion_criteria_includes_signing_and_dmg(sample_plan):
