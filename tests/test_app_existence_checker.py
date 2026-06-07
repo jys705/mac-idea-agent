@@ -89,19 +89,21 @@ def test_human_confirm_outside_graph_defaults_to_proceed(patch_search):
     """그래프 컨텍스트 밖에서 애매 구간이면 interrupt 불가 → 안전 기본값(진행)."""
     patch_search(github_items=[{"name": "Catdock", "description": "cat in dock",
                                 "stars": 50, "source": "github", "url": "u"}])
-    embeddings.set_embed_fn(_embedder_scoring({"Catdock": 0.74}))
+    embeddings.set_embed_fn(_embedder_scoring({"Catdock": 0.80}))
     res = app_existence_checker.invoke({
         "concept": "MCPurr", "description": "Dock에 고양이를 띄우는 앱", "core_feature": "상태 표시"})
     data = res["data"]
     assert data["decision_band"] == "human_confirmed"
-    assert data["similarity_score"] == 0.74
+    assert data["similarity_score"] == 0.80
     assert data["similar_app_found"] is False          # 진행
     assert data["human_decision"] == "proceed"
 
 
-def test_substring_fallback_when_no_embedding(patch_search):
+def test_substring_fallback_when_no_embedding(patch_search, monkeypatch):
     """임베딩 불가 환경 → 글자 매칭 fallback, interrupt 없음."""
-    embeddings.set_embed_fn(None)  # 주입 없음 + 키 없음 → embedding_available False
+    embeddings.set_embed_fn(None)  # 주입 해제
+    # 키 존재 여부와 무관하게 임베딩 불가 환경을 강제한다.
+    monkeypatch.setattr(aec, "embedding_available", lambda: False)
     patch_search(github_items=[{"name": "cat-dock", "description": "cat dock app",
                                 "stars": 1, "source": "github", "url": "u"}])
     res = app_existence_checker.invoke({

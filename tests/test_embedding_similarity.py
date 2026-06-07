@@ -21,12 +21,12 @@ def test_cosine_similarity_basic():
 
 
 def test_classify_band_three_tiers():
-    # 임계값: >=0.85 루프백 / 0.65~0.85 사용자확인 / <0.65 진행
+    # 임계값(Gemini 실측 튜닝): >=0.85 루프백 / 0.78~0.85 사용자확인 / <0.78 진행
     assert classify_band(0.90) == "auto_loopback"
     assert classify_band(AUTO_LOOPBACK_THRESHOLD) == "auto_loopback"  # 경계 포함
-    assert classify_band(0.74) == "human_confirm"
+    assert classify_band(0.80) == "human_confirm"
     assert classify_band(CONFIRM_THRESHOLD) == "human_confirm"        # 경계 포함
-    assert classify_band(0.64) == "auto_proceed"
+    assert classify_band(0.77) == "auto_proceed"
     assert classify_band(0.0) == "auto_proceed"
 
 
@@ -67,6 +67,6 @@ def test_embedding_available_toggle():
         assert embeddings.embedding_available() is True
     finally:
         embeddings.set_embed_fn(None)
-    # 주입 해제 후엔 OPENAI_API_KEY 유무에 따름 (이 환경엔 키 없음)
+    # 주입 해제 후엔 GOOGLE_API_KEY 유무에 따름
     import os
-    assert embeddings.embedding_available() == bool(os.getenv("OPENAI_API_KEY"))
+    assert embeddings.embedding_available() == bool(os.getenv("GOOGLE_API_KEY"))

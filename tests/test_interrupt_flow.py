@@ -41,7 +41,7 @@ def _build_graph():
 
 @pytest.fixture
 def patch_ambiguous(monkeypatch):
-    """검색 결과 + 임베더를 애매 구간(0.74)으로 고정."""
+    """검색 결과 + 임베더를 애매 구간(0.80)으로 고정."""
     def fake_appstore(query):
         return {"items": [], "data_source": "real_api", "endpoint": "itunes"}
 
@@ -56,7 +56,7 @@ def patch_ambiguous(monkeypatch):
     def fake_embed(texts):
         out = [[1.0, 0.0]]
         for t in texts[1:]:
-            s = 0.74 if "Catdock" in t else 0.0
+            s = 0.80 if "Catdock" in t else 0.0
             out.append([s, math.sqrt(1 - s * s)])
         return out
 
@@ -79,7 +79,7 @@ def test_interrupt_fires_with_evidence(patch_ambiguous):
     cfg = {"configurable": {"thread_id": "t-evidence"}}
     iv = _run_until_interrupt(graph, cfg)
     assert iv is not None, "애매 구간에서 interrupt가 발생해야 한다"
-    assert iv["similarity_score"] == 0.74
+    assert iv["similarity_score"] == 0.80
     assert iv["concept"] == "MCPurr"
     # 근거(evidence): 앱명 + 유사도 + 겹치는 점
     assert iv["similar_apps"][0]["name"] == "Catdock"

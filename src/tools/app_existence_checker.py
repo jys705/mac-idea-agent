@@ -7,11 +7,17 @@ from src.tools.embeddings import embed, cosine_similarity, embedding_available
 
 
 # ── 의미 유사도 임계값 (design_v2.md 섹션 6 — 3-tier 결정권자) ──
-# ≥ 0.85  : 자동 루프백 (명백한 중복) — LLM/Agent 결정
-# 0.65~0.85: 사용자 확인 (애매) — Human-in-the-loop (interrupt)
-# < 0.65  : 자동 진행 — 코드/Workflow 결정
+# Gemini(gemini-embedding-001) 실측 분포 기반 튜닝 (tmp_threshold_probe 측정):
+#   DUP(명백중복)    : 0.813 ~ 0.886 (avg 0.852)
+#   SAMECAT(애매)    : 0.765 ~ 0.830 (avg 0.805)
+#   UNREL(무관)      : 0.705 ~ 0.770 (avg 0.731)
+# Gemini는 점수를 전반적으로 높게 깔기 때문에(무관도 ~0.7) 초기값 0.85/0.65는
+# 하한이 무용지물이었다. 실측 분포의 경계에 맞춰 재설정:
+#   >= 0.85  : 자동 루프백 (명백 중복, DUP 상위) — LLM/Agent 결정
+#   0.78~0.85: 사용자 확인 (애매, SAMECAT 구간) — Human-in-the-loop (interrupt)
+#   < 0.78   : 자동 진행 (무관, UNREL) — 코드/Workflow 결정
 AUTO_LOOPBACK_THRESHOLD = 0.85
-CONFIRM_THRESHOLD = 0.65
+CONFIRM_THRESHOLD = 0.78
 
 
 # ── 실제 API 호출 함수 ──────────────────────────────────────
@@ -87,7 +93,7 @@ def _search_github(query: str) -> dict:
 # ── 글자 매칭 (임베딩 불가 시 fallback 전용) ────────────────
 
 def _is_similar(query: str, name: str, description: str) -> bool:
-    """단순 키워드 기반 유사도 판단 — OPENAI_API_KEY 미설정 시 fallback."""
+    """단순 키워드 기반 유사도 판단 — 임베딩 불가(키 미설정) 시 fallback."""
     query_words = set(query.lower().split())
     target = (name + " " + description).lower()
     matches = sum(1 for w in query_words if w in target)
@@ -129,7 +135,7 @@ def score_candidates(
     """내 컨셉과 각 후보 앱의 코사인 유사도를 계산해 점수를 부여한다.
 
     embed_fn을 주입하면 임베딩 구현을 갈아끼울 수 있다(테스트). None이면
-    embeddings.embed(text-embedding-3-small)를 사용한다.
+    embeddings.embed(gemini-embedding-001)를 사용한다.
     반환: similarity_score가 부여된 앱 리스트(점수 내림차순).
     """
     if not apps:
