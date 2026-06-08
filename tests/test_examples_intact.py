@@ -66,14 +66,18 @@ def test_core_modules_import_clean():
     from src.prompts.system_prompt import SYSTEM_PROMPT
     from src.tools import tools
 
-    assert "단일 기능" in SYSTEM_PROMPT or "유사도" in SYSTEM_PROMPT
-    # tool 4종 유지
+    assert "단일 기능" in SYSTEM_PROMPT or "컨셉" in SYSTEM_PROMPT
+    # ★기능 A: 에이전트 도구는 scan/generate/check/critic 4종.
+    # feasibility_checker는 ReAct 도구에서 빠지고(선택 뒤 코드가 직접 호출) concept_critic이 추가됨.
     names = {t.name for t in tools}
     assert names == {
         "trend_scanner", "concept_generator",
-        "app_existence_checker", "feasibility_checker",
+        "app_existence_checker", "concept_critic",
     }
-    # agent 모듈도 import 가능 (checkpointer/interrupt 배선 포함)
+    # agent 모듈 import 가능 + 마지막 통합 선택용 순수 함수 노출
     agent_mod = importlib.import_module("src.agent")
     assert hasattr(agent_mod, "run_agent")
-    assert agent_mod._checkpointer is not None
+    assert hasattr(agent_mod, "rank_concepts")
+    assert hasattr(agent_mod, "parse_user_selection")
+    # interrupt/MemorySaver 제거됨
+    assert not hasattr(agent_mod, "_checkpointer")

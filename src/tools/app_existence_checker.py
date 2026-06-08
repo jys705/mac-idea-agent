@@ -154,46 +154,6 @@ def score_candidates(
     return scored
 
 
-def _build_evidence(top_apps: list[dict], top_score: float) -> dict:
-    """interrupt 시 사용자에게 보여줄 근거(evidence)를 구성한다."""
-    shown = []
-    for a in top_apps[:3]:
-        shown.append({
-            "name": a.get("name"),
-            "source": a.get("source"),
-            "url": a.get("url"),
-            "description": a.get("description"),
-            "similarity_score": a.get("similarity_score"),
-            "overlap": a.get("description"),
-        })
-    return {
-        "type": "app_existence_confirmation",
-        "message": "유사한 앱이 있을 수 있습니다. 그대로 진행할까요, 다시 찾을까요?",
-        "similarity_score": top_score,
-        "similar_apps": shown,
-        "options": ["그대로 진행", "재탐색"],
-    }
-
-
-def _request_human_confirmation(evidence: dict) -> str:
-    """LangGraph interrupt로 그래프를 일시정지하고 사용자 결정을 받는다.
-
-    - 그래프 컨텍스트 안: interrupt()가 GraphInterrupt를 일으켜 그래프를 멈춘다.
-      run_agent가 근거를 출력하고 input()으로 받은 값을 Command(resume=...)로 재개하면
-      interrupt()가 그 값을 반환한다.
-    - 그래프 컨텍스트 밖(테스트에서 Tool 직접 호출): RuntimeError → 안전 기본값 "proceed".
-    """
-    from langgraph.types import interrupt
-    from langgraph.errors import GraphInterrupt
-
-    try:
-        return interrupt(evidence)
-    except GraphInterrupt:
-        raise  # 그래프 일시정지는 그대로 전파해야 한다
-    except Exception:
-        return "proceed"
-
-
 # ── LangChain Tool 정의 ────────────────────────────────────
 
 @tool
@@ -206,14 +166,17 @@ def app_existence_checker(
     """
     생성된 앱 컨셉과 의미적으로 유사한 앱이 Mac App Store 또는 GitHub에 이미 존재하는지 확인한다.
 
+    ★ 이 도구는 유사도 "점수만" 반환하고 흐름을 멈추지 않는다(중간 interrupt 없음).
+    유사 앱이 있어도 멈추거나 컨셉을 버리지 않는다. "유사앱 의심으로 밀림" 판단은
+    마지막 추천 1위 산정에서 코드가 한다.
+
     판정 방식 (글자 매칭이 아니라 의미 유사도):
     - 검색어는 지어낸 앱 이름이 아니라 "기능 설명(description + core_feature)"으로 만든다.
-    - 내 컨셉과 검색된 각 앱을 임베딩하여 코사인 유사도(0~1)를 계산한다.
-    - similarity_score 구간에 따라 결정 주체가 다르다:
-        * >= 0.85 : 명백한 중복 → similar_app_found=true (concept_generator 재호출/루프백)
-        * 0.65~0.85: 애매 → 사용자에게 근거를 보여주고 "그대로 진행/재탐색" 확인을 받는다
-        * < 0.65 : 유사하지 않음 → similar_app_found=false (그대로 진행)
-    similar_app_found=true가 반환되면 exclude_concepts에 해당 앱명을 넣어 concept_generator를 재호출한다.
+    - 내 컨셉과 검색된 각 앱을 임베딩하여 코사인 유사도(0~1)를 계산한다. 최고 점수를 반환.
+    - similarity_score 구간(라벨링용, 흐름 제어 아님):
+        * >= 0.85 : 명백한 중복 → similar_app_found=true (decision_band="auto_loopback")
+        * 0.78~0.85: 애매 → similar_app_found=false (decision_band="human_confirm", 의심 라벨)
+        * < 0.78 : 유사하지 않음 → similar_app_found=false (decision_band="auto_proceed")
     force_similar=true이면 실제 API 호출 없이 similar_app_found=true를 강제 반환한다(테스트용).
 
     Args:
@@ -310,43 +273,20 @@ def app_existence_checker(
             "error": None,
         }
 
-    # ── 의미 유사도(임베딩) 경로 ──
+    # ── 의미 유사도(임베딩) 경로 — 점수만 반환, 멈추지 않음 ──
     scored = score_candidates(concept_text, candidates)
     top_score = scored[0]["similarity_score"] if scored else 0.0
     band = classify_band(top_score)
 
-    base_data = {
+    # >= 0.85(auto_loopback)만 명백한 중복으로 표시. 0.78~0.85(human_confirm)는
+    # "의심"으로 라벨만 달고 similar_app_found=False (흐름은 안 멈춘다).
+    # 두 구간 모두 similar_apps를 함께 실어 마지막 통합 선택 UI의 근거로 쓴다.
+    return {"ok": True, "error": None, "data": {
+        "similar_app_found": band == "auto_loopback",
+        "similar_apps": scored[:3] if top_score >= CONFIRM_THRESHOLD else [],
         "similarity_score": top_score,
+        "decision_band": band,
         "similarity_method": "embedding",
         "searched": {"appstore": not appstore_failed, "github": not github_failed},
         "source_provenance": source_provenance,
-    }
-
-    if band == "auto_proceed":
-        return {"ok": True, "error": None, "data": {
-            **base_data,
-            "similar_app_found": False,
-            "similar_apps": [],
-            "decision_band": "auto_proceed",
-        }}
-
-    if band == "auto_loopback":
-        return {"ok": True, "error": None, "data": {
-            **base_data,
-            "similar_app_found": True,
-            "similar_apps": scored[:3],
-            "decision_band": "auto_loopback",
-        }}
-
-    # band == "human_confirm" → 애매 구간 → 사용자 확인 (interrupt)
-    evidence = _build_evidence(scored, top_score)
-    evidence["concept"] = concept
-    decision = _request_human_confirmation(evidence)
-    similar = map_human_decision(decision)
-    return {"ok": True, "error": None, "data": {
-        **base_data,
-        "similar_app_found": similar,
-        "similar_apps": scored[:3],
-        "decision_band": "human_confirmed",
-        "human_decision": "research" if similar else "proceed",
     }}

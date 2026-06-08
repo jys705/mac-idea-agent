@@ -2,30 +2,26 @@ import os
 import json
 import re
 import time
-import uuid
 from typing import Any, Callable
 from dotenv import load_dotenv
 
 from langchain_anthropic import ChatAnthropic
 from langgraph.prebuilt import create_react_agent
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.types import Command
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
 
 from src.tools import tools
-from src.tools.app_existence_checker import map_human_decision
+from src.tools.feasibility_checker import feasibility_checker
+from src.tools.app_existence_checker import CONFIRM_THRESHOLD
 from src.prompts.system_prompt import SYSTEM_PROMPT
 from src.observability import save_trace
 
+# 기본 생성 컨셉 수(N). 추천 1위 + 밀린 후보 이력을 만들려면 2개 이상 필요.
+DEFAULT_NUM_CONCEPTS = 3
+# 코드 카운터 상한(무한 방지): 컨셉 생성·트렌드 재탐색.
+MAX_CONCEPT_GEN = 6          # N=3 + 재생성 버퍼
+MAX_RESEARCH_CALLS = 3       # 최초 1회 + 재탐색 2회 (★기능 B)
+
 load_dotenv()
-
-
-# ── 커스텀 예외 ────────────────────────────────────────────
-
-class LoopLimitReached(Exception):
-    def __init__(self, count: int):
-        self.count = count
-        super().__init__(f"concept_generator {count}회 호출 초과")
 
 
 # ── LLM 초기화 ─────────────────────────────────────────────
@@ -33,7 +29,9 @@ class LoopLimitReached(Exception):
 _llm = ChatAnthropic(
     model="claude-sonnet-4-6",
     temperature=0,
-    max_tokens=4096,
+    # 이 LLM은 더 이상 최종 브리핑 JSON을 생성하지 않는다(assemble_today_brief가 코드로 조립).
+    # tool 호출 결정 + 짧은 완료 보고만 하므로 1024로 충분하다.
+    max_tokens=1024,
     anthropic_api_key=os.getenv("ANTHROPIC_API_KEY")
 )
 
@@ -92,41 +90,48 @@ def _build_prompt(state: dict | list) -> list:
 
 # ── Agent 생성 ─────────────────────────────────────────────
 
-# checkpointer: Human-in-the-loop interrupt(애매 구간 사용자 확인)에 필요.
-# interrupt → 일시정지 → Command(resume)로 재개하려면 thread 단위 상태 저장이 필수.
-_checkpointer = MemorySaver()
-
+# ★기능 A: 중간 interrupt를 제거했으므로 MemorySaver 체크포인터도 정리한다.
+# 사람 개입은 마지막 통합 선택 1회(human_input_fn, CLI input)로 이동했다.
 agent = create_react_agent(
     model=_llm,
     tools=tools,
     prompt=_build_prompt,   # ← 9주차: callable로 교체
-    checkpointer=_checkpointer,
 )
 
 
-# ── Human-in-the-loop: 애매 구간 사용자 확인 (CLI) ──────────
+# ── Human-in-the-loop: 마지막 통합 선택 (CLI) ──────────────
+# ★기능 A: 개입을 흐름 중간이 아니라 "마지막 한 번"으로 통합한다.
+# 추천 1위 + 밀린 후보 이력을 제시하고 [수락/다른후보/패스]를 받는다.
 
-def _default_human_input(evidence: dict) -> str:
-    """interrupt 근거(evidence)를 CLI에 출력하고 사용자 입력을 받는다.
+def _fmt_critique(c: dict) -> str:
+    crit = c.get("critique") or {}
+    return f"실용 {crit.get('practicality', '?')} / 트렌드 {crit.get('trend_power', '?')}"
 
-    design_v2.md 섹션 5: 단순 "유사 앱 있음"이 아니라 근거(앱명·유사도·겹치는 점)를
-    함께 제시한다. 엔터/‘진행’ → 그대로 진행, ‘재탐색’/‘research’ → 루프백.
+
+def _default_human_input(payload: dict) -> str:
+    """추천 1위 + 밀린 후보 이력을 CLI에 출력하고 사용자 선택을 받는다.
+
+    웹 전환 대비: run_agent는 이 함수를 주입받는다(human_input_fn). 반환 문자열은
+    parse_user_selection으로 해석한다. 엔터/1=추천 수락, 2..N=다른 후보, p=패스.
     """
-    print("\n" + "=" * 50)
-    print("⚠️  유사한 앱이 있을 수 있습니다 — 사용자 확인이 필요합니다")
-    print(f"  의미 유사도 점수: {evidence.get('similarity_score')}")
-    for a in evidence.get("similar_apps", []):
-        print(f"   • {a.get('name')} ({a.get('source')}, 유사도 {a.get('similarity_score')})")
-        if a.get("overlap"):
-            print(f"     겹치는 점: {a.get('overlap')}")
-        if a.get("url"):
-            print(f"     {a.get('url')}")
-    print("  → [그대로 진행]: 엔터 또는 '진행'   |   [재탐색]: '재탐색' 입력")
-    print("=" * 50)
+    candidates = payload.get("candidates") or []
+    print("\n" + "=" * 60)
+    print("🧑‍💻 오늘의 추천 — 마지막으로 하나만 고르세요 (중간엔 안 물어봤습니다)")
+    print("=" * 60)
+    for i, c in enumerate(candidates):
+        tag = "⭐ 추천" if c.get("is_recommended") else f"   후보 {i + 1}"
+        print(f"{tag}) {c.get('app_name')}  [{_fmt_critique(c)}]")
+        if c.get("description"):
+            print(f"      {c.get('description')}")
+        if not c.get("is_recommended") and c.get("passed_reason"):
+            print(f"      ↳ {c.get('passed_reason')}")
+    print("-" * 60)
+    print("  [엔터/1] 추천 수락   [2..] 다른 후보 선택   [p] 오늘은 패스(생성 안 함)")
+    print("=" * 60)
     try:
-        return input("선택 > ").strip() or "proceed"
+        return input("선택 > ").strip()
     except EOFError:
-        return "proceed"
+        return ""
 
 
 # ── 가드레일 ──────────────────────────────────────────────
@@ -190,9 +195,22 @@ def _extract_key_result(tool_name: str, data: dict) -> dict | None:
         return {
             "similar_app_found": data.get("similar_app_found"),
             "similar_app_names": [a.get("name") for a in similar if a.get("name")],
+            "similar_apps": [
+                {"name": a.get("name"), "source": a.get("source"),
+                 "url": a.get("url"), "similarity_score": a.get("similarity_score")}
+                for a in similar
+            ],
             "similarity_score": data.get("similarity_score"),
             "decision_band": data.get("decision_band"),
-            "next_action": "concept_generator 재호출 (루프백)" if data.get("similar_app_found") else "feasibility_checker 진행",
+        }
+    if tool_name == "concept_critic":
+        return {
+            "app_name": data.get("app_name"),
+            "practicality": data.get("practicality"),
+            "trend_power": data.get("trend_power"),
+            "peak": data.get("peak"),
+            "comment": data.get("comment"),
+            "verdict": data.get("verdict"),
         }
     if tool_name == "feasibility_checker":
         return {
@@ -301,10 +319,9 @@ def _collect_sources(trace: list[dict]) -> dict:
 def assemble_today_brief(trace: list[dict]) -> dict:
     """tool_trace로부터 today_brief를 코드로 조립한다 (LLM 미사용).
 
-    - trend_scanner: 최신 호출의 meme/it 키워드를 트렌드로
-    - concept_generator: 생성된 각 컨셉 (app_name 기준)
-    - app_existence_checker: 컨셉의 유사앱 여부/점수 (순서로 매칭)
-    - feasibility_checker: 난이도/스택/차별점/킥오프 경로 (app_name으로 매칭)
+    ★기능 A: 각 컨셉에 유사도(app_existence_checker)와 self-critique(concept_critic)를
+    함께 붙인다. **어떤 컨셉도 버리지 않는다.** feasibility(SPEC/BRIEF)는 여기서 채우지
+    않는다 — 마지막 통합 선택 뒤 코드가 선택된 1개에만 호출해 채운다(run_agent).
     """
     meme_trend, it_trend = [], []
     for t in trace:
@@ -327,8 +344,12 @@ def assemble_today_brief(trace: list[dict]) -> dict:
                 "description": kr.get("description"),
                 "core_feature": kr.get("core_feature"),
                 "app_form": kr.get("app_form"),
+                "concept_basis": kr.get("concept_basis") or {},
                 "similar_app_exists": False,
                 "similarity_score": None,
+                "similar_apps": [],
+                "critique": None,
+                "is_recommended": False,
                 "difficulty": None,
                 "stack": [],
                 "differentiation": None,
@@ -340,32 +361,34 @@ def assemble_today_brief(trace: list[dict]) -> dict:
                 concept_index[name] = len(concepts)
                 concepts.append(entry)
 
-    # app_existence_checker 결과를 컨셉에 순서대로 매핑
+    # app_existence_checker 결과를 컨셉에 순서대로 매핑 (점수만, 멈추지 않음)
     checker_results = [t["key_result"] for t in trace
                        if t["tool"] == "app_existence_checker" and t.get("key_result")]
     for i, chk in enumerate(checker_results):
         if i < len(concepts):
             concepts[i]["similar_app_exists"] = bool(chk.get("similar_app_found"))
             concepts[i]["similarity_score"] = chk.get("similarity_score")
+            concepts[i]["similar_apps"] = chk.get("similar_apps", [])
 
-    # feasibility_checker 결과를 app_name으로 매핑
-    for t in trace:
-        if t["tool"] != "feasibility_checker":
-            continue
-        kr = t.get("key_result") or {}
-        name = kr.get("app_name")
+    # concept_critic 결과 매핑 (app_name 우선, 없으면 순서)
+    critic_results = [t["key_result"] for t in trace
+                      if t["tool"] == "concept_critic" and t.get("key_result")]
+    used = set()
+    for cr in critic_results:
+        name = cr.get("app_name")
         idx = concept_index.get(name)
-        if idx is None and concepts:
-            idx = len(concepts) - 1  # app_name 누락 시 마지막 컨셉에 귀속
+        if idx is None or idx in used:
+            # app_name 매칭 실패 → 아직 critique 없는 첫 컨셉에 귀속
+            idx = next((j for j in range(len(concepts)) if j not in used), None)
         if idx is not None:
-            concepts[idx]["difficulty"] = kr.get("difficulty")
-            concepts[idx]["stack"] = kr.get("stack", [])
-            concepts[idx]["differentiation"] = kr.get("differentiation")
-            if kr.get("spec_path") or kr.get("brief_path"):
-                concepts[idx]["kickoff"] = {
-                    "spec_path": kr.get("spec_path"),
-                    "brief_path": kr.get("brief_path"),
-                }
+            concepts[idx]["critique"] = {
+                "practicality": cr.get("practicality"),
+                "trend_power": cr.get("trend_power"),
+                "peak": cr.get("peak"),
+                "comment": cr.get("comment"),
+                "verdict": cr.get("verdict"),
+            }
+            used.add(idx)
 
     return {
         "meme_trend": meme_trend,
@@ -373,6 +396,104 @@ def assemble_today_brief(trace: list[dict]) -> dict:
         "concepts": concepts,
         "sources": _collect_sources(trace),
     }
+
+
+# ── 추천 1위 산정 (코드, 결정적 — LLM 미사용) ──────────────
+# 공식: peak=max(실용,트렌드) 높은 컨셉 우선, 단 "유사앱 의심"(유사도≥0.78 또는
+# similar_app_found)이면 후순위로 민다. 둘 다 약함(peak≤2)도 자동 후순위.
+
+def _is_similarity_suspect(concept: dict) -> bool:
+    if concept.get("similar_app_exists"):
+        return True
+    sim = concept.get("similarity_score")
+    return sim is not None and sim >= CONFIRM_THRESHOLD
+
+
+def _peak_of(concept: dict) -> int:
+    crit = concept.get("critique") or {}
+    p, t = crit.get("practicality"), crit.get("trend_power")
+    return max(int(p or 0), int(t or 0))
+
+
+def rank_concepts(concepts: list[dict]) -> dict:
+    """컨셉을 추천 우선순위로 정렬한다.
+
+    Returns:
+      order: concepts의 원본 인덱스를 순위대로 (order[0] = 추천 1위)
+      recommended_index: 추천 1위의 원본 인덱스 (없으면 None)
+      passed_over: 밀린 후보 [{app_name, reason}] (순위 순)
+    """
+    if not concepts:
+        return {"order": [], "recommended_index": None, "passed_over": []}
+
+    def sort_key(i: int):
+        c = concepts[i]
+        crit = c.get("critique") or {}
+        peak = _peak_of(c)
+        total = int(crit.get("practicality") or 0) + int(crit.get("trend_power") or 0)
+        # (유사앱 의심 후순위) → (peak 높은 순) → (합 높은 순) → (입력 순서 안정)
+        return (_is_similarity_suspect(c), -peak, -total, i)
+
+    order = sorted(range(len(concepts)), key=sort_key)
+    recommended_index = order[0]
+
+    passed_over = []
+    for idx in order:
+        if idx == recommended_index:
+            continue
+        c = concepts[idx]
+        if _is_similarity_suspect(c):
+            names = ", ".join(a.get("name") for a in (c.get("similar_apps") or []) if a.get("name"))
+            sim = c.get("similarity_score")
+            reason = f"유사앱 의심으로 밀림 (유사도 {sim}{', ' + names if names else ''})"
+        elif _peak_of(c) <= 2:
+            crit = c.get("critique") or {}
+            reason = (f"self-critique 낮아 밀림 "
+                      f"(실용 {crit.get('practicality')} / 트렌드 {crit.get('trend_power')})")
+        else:
+            reason = "차순위"
+        passed_over.append({"app_name": c.get("app_name"), "reason": reason})
+
+    return {"order": order, "recommended_index": recommended_index, "passed_over": passed_over}
+
+
+def parse_user_selection(raw: str, n: int) -> dict:
+    """마지막 통합 선택 입력을 해석한다.
+
+    엔터/1/y → 추천 수락(index 0) / 2..N → 다른 후보(pick) / p,pass,패스 → 패스.
+    index는 '표시(=랭킹) 순서' 기준 0-base. 인식 불가 입력은 추천 수락으로 안전 처리.
+    """
+    t = (raw or "").strip().lower()
+    if t in ("p", "pass", "패스", "n", "no", "skip", "ㅍ"):
+        return {"action": "pass"}
+    if t in ("", "1", "y", "yes", "accept", "수락", "ㅇ", "enter"):
+        return {"action": "accept", "index": 0}
+    if t.isdigit():
+        k = int(t)
+        if k == 1:
+            return {"action": "accept", "index": 0}
+        if 2 <= k <= n:
+            return {"action": "pick", "index": k - 1}
+    return {"action": "accept", "index": 0}
+
+
+def _build_selection_payload(concepts: list[dict], ranking: dict) -> dict:
+    """human_input_fn에 넘길 추천+이력 페이로드 (랭킹 순서)."""
+    order = ranking["order"]
+    rec_idx = ranking["recommended_index"]
+    reason_by_name = {p["app_name"]: p["reason"] for p in ranking["passed_over"]}
+    candidates = []
+    for pos, idx in enumerate(order):
+        c = concepts[idx]
+        candidates.append({
+            "app_name": c.get("app_name"),
+            "description": c.get("description"),
+            "critique": c.get("critique"),
+            "similarity_score": c.get("similarity_score"),
+            "is_recommended": idx == rec_idx,
+            "passed_reason": reason_by_name.get(c.get("app_name")),
+        })
+    return {"candidates": candidates, "num": len(concepts)}
 
 
 # ── 실행 함수 ──────────────────────────────────────────────
@@ -386,7 +507,6 @@ def run_agent(
 ) -> dict[str, Any]:
     started_at = time.time()
     human_input_fn = human_input_fn or _default_human_input
-    human_decisions: list[dict] = []
 
     # 가드레일
     guard = check_guardrail(user_query)
@@ -407,6 +527,7 @@ def run_agent(
             user_input=user_query, trend_focus=trend_focus,
             difficulty_limit=difficulty_limit, exclude_existing=exclude_existing,
             messages=[], final_result=result, started_at=started_at,
+            tool_trace=[],
             stop_reason="guardrail_blocked", guardrail_blocked=True,
         )
         return result
@@ -417,175 +538,154 @@ def run_agent(
 - trend_focus: {trend_focus}
 - difficulty_limit: {difficulty_limit if difficulty_limit else "제한 없음"}
 - exclude_existing: {exclude_existing}
+- 생성할 컨셉 수: {DEFAULT_NUM_CONCEPTS}개 (각각 유사앱 검사 + self-critique)
 
-위 설정에 맞게 트렌드를 수집하고 맥앱 아이디어를 브리핑해주세요."""
+위 설정에 맞게 트렌드를 수집하고, 컨셉 {DEFAULT_NUM_CONCEPTS}개를 만들어
+각각 app_existence_checker와 concept_critic을 호출하세요. 중간에 멈추거나 컨셉을 버리지 마세요.
+feasibility_checker는 호출하지 마세요(선택 뒤 시스템이 처리합니다)."""
 
     print(f"\n{'='*50}")
     print(f"[Agent 시작] {user_query}")
     print(f"{'='*50}")
 
     accumulated_messages: list = []
-    concept_gen_count = 0
-    MAX_CONCEPT_LOOP = 3
-    # checkpointer 사용 → thread 단위 상태 저장 (interrupt 재개에 필요)
-    config = {"recursion_limit": 25, "configurable": {"thread_id": uuid.uuid4().hex}}
-
-    def _drain_stream(payload) -> dict | None:
-        """스트림을 소진하며 메시지/루프카운트를 갱신한다.
-        애매 구간 interrupt가 발생하면 그 evidence(value)를 반환, 아니면 None."""
-        nonlocal accumulated_messages, concept_gen_count
-        pending = None
-        for chunk in agent.stream(payload, config=config, stream_mode="values"):
-            if isinstance(chunk, dict) and "__interrupt__" in chunk:
-                pending = chunk["__interrupt__"][0].value
-                if chunk.get("messages"):
-                    accumulated_messages = chunk["messages"]
-                continue
-            accumulated_messages = chunk.get("messages", accumulated_messages)
-
-            concept_gen_count = sum(
-                1 for m in accumulated_messages
-                if isinstance(m, ToolMessage)
-                and _get_tool_name(m, accumulated_messages) == "concept_generator"
-            )
-            if concept_gen_count >= MAX_CONCEPT_LOOP:
-                print(f"[루프 탈출] concept_generator {concept_gen_count}회 호출 감지")
-                raise LoopLimitReached(concept_gen_count)
-        return pending
+    config = {"recursion_limit": 40}
 
     try:
-        payload: Any = {"messages": [HumanMessage(content=input_context)]}
-        while True:
-            pending = _drain_stream(payload)
-            if pending is None:
+        # ── 1) 리서치·생성·평가 단계 (LLM ReAct, 중간에 안 멈춤) ──
+        forced_stop = None
+        for chunk in agent.stream(
+            {"messages": [HumanMessage(content=input_context)]},
+            config=config, stream_mode="values",
+        ):
+            accumulated_messages = chunk.get("messages", accumulated_messages)
+            cg = sum(1 for m in accumulated_messages if isinstance(m, ToolMessage)
+                     and _get_tool_name(m, accumulated_messages) == "concept_generator")
+            ts = sum(1 for m in accumulated_messages if isinstance(m, ToolMessage)
+                     and _get_tool_name(m, accumulated_messages) == "trend_scanner")
+            # 코드 카운터 강제(무한 방지): 컨셉 생성 / 트렌드 재탐색 상한 도달 시 우아하게 중단
+            if cg > MAX_CONCEPT_GEN:
+                forced_stop = "concept_gen_limit"
+                print(f"[강제 중단] concept_generator {cg}회 — 상한({MAX_CONCEPT_GEN}) 초과")
                 break
-            # ── Human-in-the-loop: 애매 구간 사용자 확인 ──
-            decision_raw = human_input_fn(pending)
-            looped_back = map_human_decision(decision_raw)
-            human_decisions.append({
-                "app_name": pending.get("concept"),
-                "similarity_score": pending.get("similarity_score"),
-                "decision": "research" if looped_back else "proceed",
-            })
-            print(f"[사용자 확인] {'재탐색(루프백)' if looped_back else '그대로 진행'} 선택")
-            payload = Command(resume=decision_raw)
+            if ts > MAX_RESEARCH_CALLS:
+                forced_stop = "research_limit"
+                print(f"[강제 중단] trend_scanner {ts}회 — 재탐색 상한({MAX_RESEARCH_CALLS}) 초과")
+                break
 
         messages = accumulated_messages
         tool_trace = _extract_tool_trace(messages)
+        print(f"\n[Agent 완료] 메시지 수: {len(messages)} / Tool 호출: {len(tool_trace)}")
 
-        print(f"\n[Agent 완료] 총 메시지 수: {len(messages)} / Tool 호출 수: {len(tool_trace)}")
-
-        # ── 최종 브리핑을 코드로 조립 (LLM JSON 생성/파싱 제거) ──
+        # ── 2) 컨셉 조립 (유사도·critique 포함, 아무것도 안 버림) ──
         today_brief = assemble_today_brief(tool_trace)
-        used_tools = list(dict.fromkeys(t["tool"] for t in tool_trace))
-        loop_count = max(0, sum(1 for t in tool_trace if t["tool"] == "concept_generator") - 1)
+        concepts = today_brief["concepts"]
 
+        # ── 3) 추천 1위 산정 (코드, 결정적) ──
+        ranking = rank_concepts(concepts)
+        rec_idx = ranking["recommended_index"]
+        for i, c in enumerate(concepts):
+            c["is_recommended"] = (i == rec_idx)
+
+        recommendation = None
+        if rec_idx is not None:
+            rc = concepts[rec_idx]
+            crit = rc.get("critique") or {}
+            recommendation = {
+                "app_name": rc.get("app_name"),
+                "reason": f"실용 {crit.get('practicality')} / 트렌드 {crit.get('trend_power')}"
+                          f"{'' if not _is_similarity_suspect(rc) else ' (유사앱 의심 있으나 최상위)'}",
+            }
+
+        # ── 4) 마지막 통합 선택 (Human-in-the-loop, 1회) ──
+        user_selection = {"action": "pass"}
+        chosen_concept_idx = None
+        if concepts:
+            payload = _build_selection_payload(concepts, ranking)
+            raw = human_input_fn(payload)
+            sel = parse_user_selection(raw, len(concepts))
+            user_selection = sel
+            if sel["action"] in ("accept", "pick"):
+                ranked_pos = sel.get("index", 0)
+                if 0 <= ranked_pos < len(ranking["order"]):
+                    chosen_concept_idx = ranking["order"][ranked_pos]
+            print(f"[사용자 선택] action={sel['action']}"
+                  + (f" → {concepts[chosen_concept_idx]['app_name']}" if chosen_concept_idx is not None else " (패스)"))
+
+        # ── 5) 선택된 1개에만 feasibility 호출 → SPEC.md/BRIEF.md (가장 마지막) ──
+        if chosen_concept_idx is not None:
+            c = concepts[chosen_concept_idx]
+            basis = c.get("concept_basis") or {}
+            feas = feasibility_checker.invoke({
+                "concept": c.get("app_name"),
+                "core_feature": c.get("core_feature") or "",
+                "description": c.get("description") or "",
+                "meme_trend": basis.get("meme", "") or "",
+                "it_trend": basis.get("it", "") or "",
+                "difficulty_limit": difficulty_limit,
+            })
+            if feas.get("ok"):
+                fd = feas["data"]
+                c["difficulty"] = fd.get("difficulty")
+                c["stack"] = fd.get("stack", [])
+                c["differentiation"] = fd.get("differentiation")
+                if fd.get("spec_path") or fd.get("brief_path"):
+                    c["kickoff"] = {"spec_path": fd.get("spec_path"),
+                                    "brief_path": fd.get("brief_path")}
+
+        # ── 6) 결과·메타데이터 조립 ──
+        used_tools = list(dict.fromkeys(t["tool"] for t in tool_trace))
+        cg_calls = sum(1 for t in tool_trace if t["tool"] == "concept_generator")
+        research_rounds = sum(1 for t in tool_trace if t["tool"] == "trend_scanner")
         result = {
             "today_brief": today_brief,
             "metadata": {
                 "used_tools": used_tools,
-                "loop_count": loop_count,
-                "failure_type": None,
-                "fallback_action": None,
+                "concepts_generated": len(concepts),
+                "concept_gen_calls": cg_calls,
+                # loop_count = 재생성(루프백) 횟수 = 호출수 − 유지된 컨셉 수 (정상 흐름 0)
+                "loop_count": max(0, cg_calls - len(concepts)),
+                "research_rounds": research_rounds,
+                "recommendation": recommendation,
+                "passed_over": ranking["passed_over"],
+                "user_selection": user_selection,
+                "failure_type": None if not forced_stop else "forced_stop",
+                "fallback_action": None if not forced_stop else f"코드 상한 도달({forced_stop}) — 현재까지 결과로 진행",
                 "sources": today_brief.get("sources", {}),
                 "tool_trace": tool_trace,
-                "human_decisions": human_decisions,
             },
         }
         save_trace(
             user_input=user_query, trend_focus=trend_focus,
             difficulty_limit=difficulty_limit, exclude_existing=exclude_existing,
             messages=messages, final_result=result, started_at=started_at,
-            stop_reason="final_answer",
-        )
-        return result
-
-    except LoopLimitReached as e:
-        partial_trace = _extract_tool_trace(accumulated_messages) if accumulated_messages else []
-        concepts_so_far = []
-        for t in partial_trace:
-            if t["tool"] == "concept_generator" and t.get("key_result"):
-                name = t["key_result"].get("app_name")
-                desc = t["key_result"].get("description")
-                if name:
-                    concepts_so_far.append({"app_name": name, "description": desc})
-
-        result = {
-            "today_brief": {
-                "meme_trend": [], "it_trend": [],
-                "concepts": concepts_so_far,
-                "notice": f"동일 조합 {e.count}회 재시도로 루프 탈출",
-            },
-            "metadata": {
-                "used_tools": list(dict.fromkeys(t["tool"] for t in partial_trace)),
-                "loop_count": e.count,
-                "failure_type": "loop_overflow",
-                "fallback_action": f"동일 조합 {e.count}회 초과 — 차별화 포인트 제안으로 대체",
-                "tool_trace": partial_trace,
-                "human_decisions": human_decisions,
-            },
-        }
-        save_trace(
-            user_input=user_query, trend_focus=trend_focus,
-            difficulty_limit=difficulty_limit, exclude_existing=exclude_existing,
-            messages=accumulated_messages, final_result=result,
-            started_at=started_at, stop_reason="loop_overflow",
+            tool_trace=tool_trace,
+            stop_reason="user_pass" if user_selection.get("action") == "pass" else "final_answer",
         )
         return result
 
     except Exception as e:
         error_str = str(e)
         partial_trace = _extract_tool_trace(accumulated_messages) if accumulated_messages else []
-
-        if "Recursion limit" in error_str or "recursion_limit" in error_str.lower():
-            print(f"[루프 제한 도달] {error_str}")
-            concepts_so_far = []
-            for t in partial_trace:
-                if t["tool"] == "concept_generator" and t.get("key_result"):
-                    name = t["key_result"].get("app_name")
-                    desc = t["key_result"].get("description")
-                    if name:
-                        concepts_so_far.append({"app_name": name, "description": desc})
-
-            result = {
-                "today_brief": {
-                    "meme_trend": [], "it_trend": [],
-                    "concepts": concepts_so_far,
-                    "notice": "유사 앱 탐색 반복으로 최대 단계에 도달했습니다. 조건을 완화하거나 다른 트렌드로 재시도해주세요.",
-                },
-                "metadata": {
-                    "used_tools": list(dict.fromkeys(t["tool"] for t in partial_trace)),
-                    "loop_count": sum(1 for t in partial_trace if t["tool"] == "concept_generator"),
-                    "failure_type": "loop_overflow",
-                    "fallback_action": "부분 결과 반환 — 루프 제한 도달. exclude_existing 해제 또는 difficulty_limit 완화 권장",
-                    "tool_trace": partial_trace,
-                    "human_decisions": human_decisions,
-                },
-            }
-            save_trace(
-                user_input=user_query, trend_focus=trend_focus,
-                difficulty_limit=difficulty_limit, exclude_existing=exclude_existing,
-                messages=accumulated_messages, final_result=result,
-                started_at=started_at, stop_reason="loop_overflow",
-            )
-        else:
-            print(f"[Agent 오류] {error_str}")
-            result = {
-                "today_brief": None,
-                "metadata": {
-                    "used_tools": [t["tool"] for t in partial_trace],
-                    "loop_count": 0,
-                    "failure_type": "agent_error",
-                    "fallback_action": None,
-                    "error": error_str,
-                    "tool_trace": partial_trace,
-                    "human_decisions": human_decisions,
-                },
-            }
-            save_trace(
-                user_input=user_query, trend_focus=trend_focus,
-                difficulty_limit=difficulty_limit, exclude_existing=exclude_existing,
-                messages=accumulated_messages, final_result=result,
-                started_at=started_at, stop_reason="agent_error",
-            )
+        print(f"[Agent 오류] {error_str}")
+        is_recursion = "Recursion limit" in error_str or "recursion_limit" in error_str.lower()
+        result = {
+            "today_brief": None,
+            "metadata": {
+                "used_tools": list(dict.fromkeys(t["tool"] for t in partial_trace)),
+                "loop_count": 0,
+                "concepts_generated": 0,
+                "failure_type": "loop_overflow" if is_recursion else "agent_error",
+                "fallback_action": "recursion_limit 도달 — 조건 완화 권장" if is_recursion else None,
+                "error": error_str,
+                "tool_trace": partial_trace,
+            },
+        }
+        save_trace(
+            user_input=user_query, trend_focus=trend_focus,
+            difficulty_limit=difficulty_limit, exclude_existing=exclude_existing,
+            messages=accumulated_messages, final_result=result,
+            started_at=started_at, tool_trace=partial_trace,
+            stop_reason="loop_overflow" if is_recursion else "agent_error",
+        )
         return result

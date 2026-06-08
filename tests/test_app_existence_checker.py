@@ -85,18 +85,22 @@ def test_auto_loopback_high_score(patch_search):
     assert data["similarity_score"] == 0.90
 
 
-def test_human_confirm_outside_graph_defaults_to_proceed(patch_search):
-    """그래프 컨텍스트 밖에서 애매 구간이면 interrupt 불가 → 안전 기본값(진행)."""
+def test_ambiguous_band_records_score_without_stopping(patch_search):
+    """★기능 A: 애매 구간(0.78~0.85)은 interrupt 없이 점수만 기록하고 진행한다."""
     patch_search(github_items=[{"name": "Catdock", "description": "cat in dock",
                                 "stars": 50, "source": "github", "url": "u"}])
     embeddings.set_embed_fn(_embedder_scoring({"Catdock": 0.80}))
     res = app_existence_checker.invoke({
         "concept": "MCPurr", "description": "Dock에 고양이를 띄우는 앱", "core_feature": "상태 표시"})
     data = res["data"]
-    assert data["decision_band"] == "human_confirmed"
+    # 라벨은 human_confirm(의심)이지만 흐름은 멈추지 않고 similar_app_found=False
+    assert data["decision_band"] == "human_confirm"
     assert data["similarity_score"] == 0.80
-    assert data["similar_app_found"] is False          # 진행
-    assert data["human_decision"] == "proceed"
+    assert data["similar_app_found"] is False
+    # 마지막 통합 선택 UI 근거로 쓰도록 similar_apps를 함께 싣는다 (≥0.78)
+    assert data["similar_apps"] and data["similar_apps"][0]["name"] == "Catdock"
+    # interrupt 잔재(human_decision) 없음
+    assert "human_decision" not in data
 
 
 def test_substring_fallback_when_no_embedding(patch_search, monkeypatch):

@@ -61,9 +61,28 @@ def main():
         print("="*50)
         print(output)
 
-    # 생성된 개발 킥오프 산출물(SPEC.md / BRIEF.md) 경로 안내
     brief = result.get("today_brief") or {}
     concepts = brief.get("concepts") or []
+    meta = result.get("metadata") or {}
+
+    # 추천 1위 + 밀린 후보 이력 (마지막 통합 선택의 근거)
+    rec = meta.get("recommendation")
+    passed = meta.get("passed_over") or []
+    if rec or passed:
+        print("\n" + "="*50)
+        print("🏁 추천 & 밀린 후보 이력")
+        print("="*50)
+        if rec:
+            print(f"  ⭐ 추천 1위: {rec.get('app_name')} — {rec.get('reason')}")
+        for p in passed:
+            print(f"     · {p.get('app_name')}: {p.get('reason')}")
+
+    # 사용자 최종 선택 결과
+    sel = meta.get("user_selection") or {}
+    if sel.get("action") == "pass":
+        print("\n🛌 오늘은 패스했습니다 — SPEC.md/BRIEF.md를 생성하지 않았습니다.")
+
+    # 생성된 개발 킥오프 산출물(SPEC.md / BRIEF.md) 경로 안내 (선택한 1개만)
     kickoff_lines = []
     for c in concepts:
         kickoff = c.get("kickoff") or {}

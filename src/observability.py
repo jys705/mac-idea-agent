@@ -28,53 +28,6 @@ def _mask_sensitive(obj: Any) -> Any:
     return obj
 
 
-def extract_tool_trace(messages: list) -> list[dict]:
-    from langchain_core.messages import AIMessage, ToolMessage
-    import json as _json
-
-    trace = []
-    step = 0
-    call_id_to_name: dict[str, str] = {}
-
-    for m in messages:
-        if isinstance(m, AIMessage):
-            for tc in (getattr(m, "tool_calls", None) or []):
-                cid = tc.get("id", "") if isinstance(tc, dict) else getattr(tc, "id", "")
-                name = tc.get("name", "unknown") if isinstance(tc, dict) else getattr(tc, "name", "unknown")
-                call_id_to_name[cid] = name
-
-    for m in messages:
-        if not isinstance(m, ToolMessage):
-            continue
-        step += 1
-        tool_name = call_id_to_name.get(m.tool_call_id, "unknown")
-        content = m.content
-        parsed = {}
-        if isinstance(content, str):
-            try:
-                parsed = _json.loads(content)
-            except Exception:
-                pass
-        elif isinstance(content, dict):
-            parsed = content
-
-        ok = parsed.get("ok") if isinstance(parsed, dict) else None
-        data = parsed.get("data") if isinstance(parsed, dict) else None
-        provenance = data.get("source_provenance") if isinstance(data, dict) else None
-        err = parsed.get("error") if isinstance(parsed, dict) else None
-
-        trace.append({
-            "step": step,
-            "tool": tool_name,
-            "result": "success" if ok else "error",
-            "ok": ok,
-            "source_provenance": provenance,
-            "error_code": (err or {}).get("code") if isinstance(err, dict) else None,
-            "latency_ms": None,
-        })
-    return trace
-
-
 def aggregate_tokens(messages: list) -> dict:
     """전체 messages에서 token 사용량 합산 (캐시 토큰 포함)"""
     total_input = 0
@@ -120,15 +73,18 @@ def save_trace(
     messages: list,
     final_result: dict,
     started_at: float,
+    tool_trace: list[dict],
     stop_reason: str = "unknown",
     guardrail_blocked: bool = False,
 ) -> str:
-    from langchain_core.messages import AIMessage, ToolMessage
+    """trace를 저장한다.
 
+    tool_trace는 agent.run_agent가 이미 계산한 단일 진실 소스(_extract_tool_trace)를
+    그대로 받는다. 여기서 재추출하지 않는다 → steps와 metadata.tool_trace가 동일 데이터.
+    """
     trace_id = f"run_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
     total_latency_ms = round((time.time() - started_at) * 1000)
 
-    tool_trace = extract_tool_trace(messages)
     token_usage = aggregate_tokens(messages)
 
     trace = {
