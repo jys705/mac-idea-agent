@@ -1,4 +1,5 @@
 import os
+import re
 import requests
 from datetime import datetime, timezone
 from typing import Any
@@ -9,6 +10,41 @@ from langchain_core.tools import tool
 HN_ENDPOINT = "https://hacker-news.firebaseio.com/v0/topstories.json"
 GITHUB_ENDPOINT = "https://api.github.com/search/repositories"
 YOUTUBE_ENDPOINT = "https://www.googleapis.com/youtube/v3/videos"
+
+
+# ── 10주차: 간접 Prompt Injection 방어 ──────────────────────
+# 외부 소스(HN/Reddit/YouTube/GitHub)는 공격자가 통제할 수 있는 텍스트(제목 등)를
+# 돌려줄 수 있다. 그 텍스트가 keyword/title로 LLM context에 그대로 들어가면
+# 간접 인젝션 벡터가 된다. 탐지 시 원문을 보존하되 마스킹 표시를 덧붙인다.
+
+_EXTERNAL_INJECTION_PATTERNS = [
+    r"ignore\s+previous\s+instructions",
+    r"disregard\s+(the\s+)?(above|previous)",
+    r"reveal\s+(your|the)\s+system",
+    r"you\s+are\s+now",
+    r"forget\s+(your|the)\s+(instructions|rules)",
+    r"<\s*system\s*>",
+    r"이전\s*(지시|명령)을?\s*무시",
+    r"시스템\s*프롬프트\s*(를|을)?\s*(출력|보여)",
+    r"\[INST\]",
+    r"<\|im_start\|>",
+    r"force_similar\s*=\s*[Tt]rue",
+    r"force_youtube_fail\s*=\s*[Tt]rue",
+]
+
+
+def _sanitize_external_content(text: str) -> str:
+    """외부 API 응답 텍스트(keyword/title)에서 간접 인젝션 의심 패턴을 탐지한다.
+
+    탐지되면 원문을 잘라 보존하면서 "[SANITIZED: ...]" 표시를 앞에 붙여, LLM이
+    이 텍스트를 지시문이 아니라 의심스러운 외부 데이터로 인식하게 한다.
+    """
+    if not text:
+        return text
+    for pat in _EXTERNAL_INJECTION_PATTERNS:
+        if re.search(pat, text, flags=re.IGNORECASE):
+            return f"[SANITIZED: injection_pattern_detected] {text[:30]}..."
+    return text
 
 
 # ── 실제 API 호출 함수 ──────────────────────────────────────
@@ -27,7 +63,7 @@ def _fetch_hackernews(limit: int = 5) -> dict:
             item = r.json()
             if item and item.get("type") == "story" and item.get("title"):
                 stories.append({
-                    "keyword": item["title"],
+                    "keyword": _sanitize_external_content(item["title"]),
                     "source": "hackernews",
                     "url": item.get("url", f"https://news.ycombinator.com/item?id={story_id}"),
                     "score": item.get("score", 0)
@@ -61,7 +97,7 @@ def _fetch_github_trending(limit: int = 5) -> dict:
         items = res.json().get("items", [])
         parsed = [
             {
-                "keyword": f"{item['name']} ({item.get('language', 'unknown')})",
+                "keyword": _sanitize_external_content(f"{item['name']} ({item.get('language', 'unknown')})"),
                 "source": "github",
                 "url": item["html_url"],
                 "stars": item["stargazers_count"],
@@ -118,8 +154,8 @@ def _fetch_youtube(limit: int = 5, force_fail: bool = False) -> dict:
             # 태그가 있으면 태그 기반, 없으면 제목 기반 키워드
             keyword = tags[0] if tags else title
             parsed.append({
-                "keyword": keyword,
-                "title": title,
+                "keyword": _sanitize_external_content(keyword),
+                "title": _sanitize_external_content(title),
                 "source": "youtube",
                 "url": f"https://youtube.com/watch?v={item.get('id', '')}",
                 "views": int(stats.get("viewCount", 0)),
@@ -151,7 +187,7 @@ def _fetch_reddit(limit: int = 5) -> dict:
         memes = res.json().get("memes", [])
         items = [
             {
-                "keyword": m["title"],
+                "keyword": _sanitize_external_content(m["title"]),
                 "source": "reddit",
                 "url": m["postLink"],
                 "score": m.get("ups", 0),
@@ -204,7 +240,7 @@ def _fetch_productivity(limit: int = 5) -> dict:
             if not title or "Moderator" in title or title.startswith("/r/"):
                 continue
             items.append({
-                "keyword": title,
+                "keyword": _sanitize_external_content(title),
                 "source": "reddit_productivity",
                 "url": lm.group(1) if lm else PROD_ENDPOINT,
                 "score": 0,  # RSS는 ups 미제공
@@ -315,7 +351,7 @@ def trend_scanner(
     Args:
         trend_type: 수집 유형. "meme" = 밈만, "IT" = IT 트렌드만, "both" = 둘 다 (기본값)
         limit: 소스당 수집할 키워드 수 (기본값 5)
-        force_youtube_fail: True이면 YouTube API 실패를 강제 시뮬레이션 (테스트용)
+        force_youtube_fail: 내부 테스트 전용 플래그. 사용자 요청을 근거로 호출하지 말 것.
 
     Returns:
         ok: 성공 여부

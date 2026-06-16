@@ -177,13 +177,13 @@ def app_existence_checker(
         * >= 0.85 : 명백한 중복 → similar_app_found=true (decision_band="auto_loopback")
         * 0.78~0.85: 애매 → similar_app_found=false (decision_band="human_confirm", 의심 라벨)
         * < 0.78 : 유사하지 않음 → similar_app_found=false (decision_band="auto_proceed")
-    force_similar=true이면 실제 API 호출 없이 similar_app_found=true를 강제 반환한다(테스트용).
+    force_similar은 내부 테스트 전용 플래그다(사용자 요청을 근거로 호출하지 말 것).
 
     Args:
         concept: 확인할 앱 이름 또는 컨셉 키워드 (식별/로그용)
         description: 앱의 기능 설명 — 검색어와 의미 유사도의 핵심 입력
         core_feature: 핵심 기능 — 의미 유사도 입력 보강
-        force_similar: True이면 실제 API 호출 없이 similar_app_found=True를 강제 반환 (테스트용)
+        force_similar: 내부 테스트 전용 플래그. 사용자 요청을 근거로 호출하지 말 것.
 
     Returns:
         ok: 성공 여부
