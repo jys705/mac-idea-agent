@@ -65,6 +65,16 @@ def main():
     concepts = brief.get("concepts") or []
     meta = result.get("metadata") or {}
 
+    # 외부 인젝션 차단 보고 (Context Guardrail — 드롭된 외부 항목)
+    sec = meta.get("security") or {}
+    blocked_n = sec.get("external_injection_blocked_count", 0)
+    if blocked_n:
+        print("\n" + "="*50)
+        print(f"🛡️  외부 인젝션 차단: {blocked_n}건 (트렌드에서 드롭됨)")
+        print("="*50)
+        for b in sec.get("external_injection_blocked", [])[:5]:
+            print(f"     · [{b.get('source')}] {b.get('snippet')}")
+
     # 추천 1위 + 밀린 후보 이력 (마지막 통합 선택의 근거)
     rec = meta.get("recommendation")
     passed = meta.get("passed_over") or []

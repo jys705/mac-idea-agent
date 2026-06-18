@@ -12,10 +12,16 @@ GITHUB_ENDPOINT = "https://api.github.com/search/repositories"
 YOUTUBE_ENDPOINT = "https://www.googleapis.com/youtube/v3/videos"
 
 
-# ── 10주차: 간접 Prompt Injection 방어 ──────────────────────
-# 외부 소스(HN/Reddit/YouTube/GitHub)는 공격자가 통제할 수 있는 텍스트(제목 등)를
-# 돌려줄 수 있다. 그 텍스트가 keyword/title로 LLM context에 그대로 들어가면
-# 간접 인젝션 벡터가 된다. 탐지 시 원문을 보존하되 마스킹 표시를 덧붙인다.
+# ── 10주차: 간접 Prompt Injection 방어 (절충: 드롭 + 집계, 과다 시 중단) ──
+# 외부 소스(HN/Reddit/YouTube/GitHub/Reddit-productivity)는 공격자가 통제할 수 있는
+# 텍스트(제목 등)를 돌려줄 수 있다. 그 텍스트가 keyword/title로 LLM context에 들어가면
+# 간접 인젝션 벡터가 된다.
+#
+# 방어 정책(멘토 피드백 반영):
+#  - 탐지된 항목은 라벨만 붙여 통과시키지 않고 **아예 드롭**한다(원문이 context에 안 들어감).
+#  - 몇 건을 어느 소스에서 드롭했는지 **집계해 보고**한다(관측성).
+#  - 단일 항목 오염은 공개 데이터의 노이즈일 수 있으므로 소수면 드롭 후 계속 진행하고,
+#    오염 비율이 과도하면(조직적 공격 의심) trend_scanner가 ok=False로 중단을 알린다.
 
 _EXTERNAL_INJECTION_PATTERNS = [
     r"ignore\s+previous\s+instructions",
@@ -33,18 +39,33 @@ _EXTERNAL_INJECTION_PATTERNS = [
 ]
 
 
-def _sanitize_external_content(text: str) -> str:
-    """외부 API 응답 텍스트(keyword/title)에서 간접 인젝션 의심 패턴을 탐지한다.
-
-    탐지되면 원문을 잘라 보존하면서 "[SANITIZED: ...]" 표시를 앞에 붙여, LLM이
-    이 텍스트를 지시문이 아니라 의심스러운 외부 데이터로 인식하게 한다.
-    """
+def detect_injection(text: str) -> bool:
+    """외부 텍스트에 간접 인젝션 의심 패턴이 있으면 True (순수 함수, 테스트 가능)."""
     if not text:
-        return text
+        return False
     for pat in _EXTERNAL_INJECTION_PATTERNS:
         if re.search(pat, text, flags=re.IGNORECASE):
-            return f"[SANITIZED: injection_pattern_detected] {text[:30]}..."
-    return text
+            return True
+    return False
+
+
+def _filter_injected(items: list[dict], source: str) -> tuple[list[dict], list[dict]]:
+    """items에서 인젝션 의심 항목을 드롭한다.
+
+    keyword/title 필드를 검사해 하나라도 패턴에 걸리면 그 항목을 제거.
+    반환: (clean_items, blocked_records). blocked_records는 보고용 메타.
+    """
+    clean, blocked = [], []
+    for it in items:
+        probe = f"{it.get('keyword', '')} {it.get('title', '')}"
+        if detect_injection(probe):
+            blocked.append({
+                "source": source,
+                "snippet": (it.get("keyword") or it.get("title") or "")[:60],
+            })
+        else:
+            clean.append(it)
+    return clean, blocked
 
 
 # ── 실제 API 호출 함수 ──────────────────────────────────────
@@ -63,7 +84,7 @@ def _fetch_hackernews(limit: int = 5) -> dict:
             item = r.json()
             if item and item.get("type") == "story" and item.get("title"):
                 stories.append({
-                    "keyword": _sanitize_external_content(item["title"]),
+                    "keyword": item["title"],
                     "source": "hackernews",
                     "url": item.get("url", f"https://news.ycombinator.com/item?id={story_id}"),
                     "score": item.get("score", 0)
@@ -97,7 +118,7 @@ def _fetch_github_trending(limit: int = 5) -> dict:
         items = res.json().get("items", [])
         parsed = [
             {
-                "keyword": _sanitize_external_content(f"{item['name']} ({item.get('language', 'unknown')})"),
+                "keyword": f"{item['name']} ({item.get('language', 'unknown')})",
                 "source": "github",
                 "url": item["html_url"],
                 "stars": item["stargazers_count"],
@@ -154,8 +175,8 @@ def _fetch_youtube(limit: int = 5, force_fail: bool = False) -> dict:
             # 태그가 있으면 태그 기반, 없으면 제목 기반 키워드
             keyword = tags[0] if tags else title
             parsed.append({
-                "keyword": _sanitize_external_content(keyword),
-                "title": _sanitize_external_content(title),
+                "keyword": keyword,
+                "title": title,
                 "source": "youtube",
                 "url": f"https://youtube.com/watch?v={item.get('id', '')}",
                 "views": int(stats.get("viewCount", 0)),
@@ -187,7 +208,7 @@ def _fetch_reddit(limit: int = 5) -> dict:
         memes = res.json().get("memes", [])
         items = [
             {
-                "keyword": _sanitize_external_content(m["title"]),
+                "keyword": m["title"],
                 "source": "reddit",
                 "url": m["postLink"],
                 "score": m.get("ups", 0),
@@ -240,7 +261,7 @@ def _fetch_productivity(limit: int = 5) -> dict:
             if not title or "Moderator" in title or title.startswith("/r/"):
                 continue
             items.append({
-                "keyword": _sanitize_external_content(title),
+                "keyword": title,
                 "source": "reddit_productivity",
                 "url": lm.group(1) if lm else PROD_ENDPOINT,
                 "score": 0,  # RSS는 ups 미제공
@@ -366,6 +387,7 @@ def trend_scanner(
         "it_trends": [],
         "partial_failure": [],
         "source_provenance": {},
+        "injection_blocked": [],   # ★ 인젝션으로 드롭된 외부 항목 집계 (보고용)
     }
     fetched_at = datetime.now(timezone.utc).isoformat()
 
@@ -388,12 +410,16 @@ def trend_scanner(
         if reddit["data_source"] == "fallback" and not reddit["items"]:
             result["partial_failure"].append("reddit")
         else:
-            result["meme_trends"].extend(reddit["items"])
+            clean, blocked = _filter_injected(reddit["items"], "reddit")
+            result["meme_trends"].extend(clean)
+            result["injection_blocked"].extend(blocked)
 
         if youtube["data_source"] == "fallback" and not youtube["items"]:
             result["partial_failure"].append("youtube")
         else:
-            result["meme_trends"].extend(youtube["items"])
+            clean, blocked = _filter_injected(youtube["items"], "youtube")
+            result["meme_trends"].extend(clean)
+            result["injection_blocked"].extend(blocked)
 
     # IT 트렌드 수집
     if trend_type in ("IT", "both"):
@@ -405,12 +431,16 @@ def trend_scanner(
         if hn["data_source"] == "fallback" and not hn["items"]:
             result["partial_failure"].append("hackernews")
         else:
-            result["it_trends"].extend(hn["items"])
+            clean, blocked = _filter_injected(hn["items"], "hackernews")
+            result["it_trends"].extend(clean)
+            result["injection_blocked"].extend(blocked)
 
         if github["data_source"] == "fallback" and not github["items"]:
             result["partial_failure"].append("github")
         else:
-            result["it_trends"].extend(github["items"])
+            clean, blocked = _filter_injected(github["items"], "github")
+            result["it_trends"].extend(clean)
+            result["injection_blocked"].extend(blocked)
 
         # 생활·생산성 트렌드 (r/productivity) — 거북목·집중·루틴 등 생활 밀착 실용 소재 보강
         productivity = _fetch_productivity(limit)
@@ -418,13 +448,30 @@ def trend_scanner(
         if productivity["data_source"] == "fallback" and not productivity["items"]:
             result["partial_failure"].append("productivity")
         else:
-            result["it_trends"].extend(productivity["items"])
+            clean, blocked = _filter_injected(productivity["items"], "reddit_productivity")
+            result["it_trends"].extend(clean)
+            result["injection_blocked"].extend(blocked)
 
     # ★기능 B: 충분성 판단 근거 첨부 (재탐색 여부의 객관 근거)
     result["sufficiency"] = compute_sufficiency(
         result["meme_trends"], result["it_trends"],
         result["partial_failure"], trend_type,
     )
+
+    # ★ 인젝션 절충 판정(전체 실패 체크보다 먼저): 드롭이 과도하면(수집 항목 대비 과반 또는
+    #   3건 이상) 조직적 공격으로 보고 중단. 소수면 드롭한 채 계속 진행(공개 데이터 노이즈).
+    blocked_n = len(result["injection_blocked"])
+    kept_n = len(result["meme_trends"]) + len(result["it_trends"])
+    if blocked_n and blocked_n >= max(3, kept_n):
+        return {
+            "ok": False,
+            "data": result,
+            "error": {
+                "code": "EXTERNAL_INJECTION_OVERFLOW",
+                "message": f"외부 소스 인젝션 과다 탐지({blocked_n}건) — 조직적 공격 의심으로 중단",
+                "blocked_count": blocked_n,
+            },
+        }
 
     # 전체 실패 체크
     if not result["meme_trends"] and not result["it_trends"]:

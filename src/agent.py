@@ -186,10 +186,13 @@ def _extract_key_result(tool_name: str, data: dict) -> dict | None:
     if tool_name == "trend_scanner":
         meme = [t.get("keyword") for t in data.get("meme_trends", []) if t.get("keyword")]
         it = [t.get("keyword") for t in data.get("it_trends", []) if t.get("keyword")]
+        blocked = data.get("injection_blocked", []) or []
         return {
             "top_meme_keywords": meme[:3],
             "top_it_keywords": it[:3],
             "partial_failure": data.get("partial_failure", []),
+            "injection_blocked": blocked,
+            "injection_blocked_count": len(blocked),
         }
     if tool_name == "concept_generator":
         return {
@@ -405,6 +408,21 @@ def assemble_today_brief(trace: list[dict]) -> dict:
         "it_trend": it_trend,
         "concepts": concepts,
         "sources": _collect_sources(trace),
+        "security": _collect_injection_report(trace),
+    }
+
+
+def _collect_injection_report(trace: list[dict]) -> dict:
+    """모든 trend_scanner 호출에서 드롭된 인젝션 항목을 집계한다(보고용)."""
+    blocked: list[dict] = []
+    for t in trace:
+        if t["tool"] != "trend_scanner":
+            continue
+        kr = t.get("key_result") or {}
+        blocked.extend(kr.get("injection_blocked", []) or [])
+    return {
+        "external_injection_blocked_count": len(blocked),
+        "external_injection_blocked": blocked,
     }
 
 
@@ -662,6 +680,7 @@ feasibility_checker는 호출하지 마세요(선택 뒤 시스템이 처리합�
                 "failure_type": None if not forced_stop else "forced_stop",
                 "fallback_action": None if not forced_stop else f"코드 상한 도달({forced_stop}) — 현재까지 결과로 진행",
                 "sources": today_brief.get("sources", {}),
+                "security": today_brief.get("security", {}),
                 "tool_trace": tool_trace,
             },
         }
